@@ -1,0 +1,8 @@
+[
+  {
+    "name": "Example Company",
+    "accountId": "REPLACE_WITH_ACCOUNT_ID",
+    "locationId": "REPLACE_WITH_LOCATION_ID",
+    "manageUrl": "https://business.google.com/reviews"
+  }
+]
