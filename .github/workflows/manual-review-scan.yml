@@ -30,7 +30,9 @@ jobs:
           PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
           PLACE_ID: ${{ secrets.PLACE_ID }}
           BUSINESS_NAME: SOS Septic
-          FLAG_ALL_REVIEWS: ${{ inputs.flag_all_reviews }}
+          # TEMPORARY: previewing every review (not just <5 stars) so we can see
+          # real formatted emails. Set back to 'false' before handing this off.
+          FLAG_ALL_REVIEWS: 'true'
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
