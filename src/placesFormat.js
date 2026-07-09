@@ -2,13 +2,13 @@ export function reviewId(review) {
   return review.name ?? `${review.authorAttribution?.displayName ?? 'anon'}|${review.publishTime ?? ''}|${review.rating}`;
 }
 
-export function subjectFor({ name, newlyFlagged }) {
+export function subjectFor({ name, newlyFlagged, criteriaLabel }) {
   return newlyFlagged.length > 0
-    ? `⭐ ${name}: ${newlyFlagged.length} new review(s) under 5 stars`
-    : `✅ ${name}: no new reviews under 5 stars`;
+    ? `⭐ ${name}: ${newlyFlagged.length} new review(s) ${criteriaLabel}`
+    : `✅ ${name}: no new reviews ${criteriaLabel}`;
 }
 
-export function buildHtml({ name, place, reviews, flagged, newlyFlagged }) {
+export function buildHtml({ name, place, reviews, flagged, newlyFlagged, criteriaLabel }) {
   const newIds = new Set(newlyFlagged.map(reviewId));
   const rows = flagged.map((review) => `
     <div style="border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0;">
@@ -23,7 +23,7 @@ export function buildHtml({ name, place, reviews, flagged, newlyFlagged }) {
     <h2>${escapeHtml(name)} — review scan</h2>
     <p>Overall rating: <strong>${place.rating}★</strong> across ${place.userRatingCount} ratings.</p>
     <p>Checked the ${reviews.length} most recent reviews Google exposes:
-      <strong>${flagged.length}</strong> below 5 stars, <strong>${newlyFlagged.length}</strong> new since the last scan.</p>
+      <strong>${flagged.length}</strong> ${criteriaLabel}, <strong>${newlyFlagged.length}</strong> new since the last scan.</p>
     ${rows || '<p>Nothing needs attention right now. 🎉</p>'}
     <p><a href="${escapeHtml(place.googleMapsUri ?? 'https://business.google.com/reviews')}">Open the listing on Google Maps</a>
       &middot; <a href="https://business.google.com/reviews">Reply to reviews</a></p>
@@ -31,12 +31,12 @@ export function buildHtml({ name, place, reviews, flagged, newlyFlagged }) {
       reviews, so older unanswered reviews won't appear here.</p>`;
 }
 
-export function buildText({ name, place, reviews, flagged, newlyFlagged }) {
+export function buildText({ name, place, reviews, flagged, newlyFlagged, criteriaLabel }) {
   const newIds = new Set(newlyFlagged.map(reviewId));
   const lines = [
     `${name} — review scan`,
     `Overall rating: ${place.rating} stars across ${place.userRatingCount} ratings.`,
-    `Checked the ${reviews.length} most recent reviews; ${flagged.length} below 5 stars, ${newlyFlagged.length} new since the last scan.`,
+    `Checked the ${reviews.length} most recent reviews; ${flagged.length} ${criteriaLabel}, ${newlyFlagged.length} new since the last scan.`,
     '',
   ];
   for (const review of flagged) {

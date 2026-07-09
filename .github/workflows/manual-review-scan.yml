@@ -3,7 +3,12 @@ name: Manual Review Scan (Places API)
 on:
   schedule:
     - cron: '0 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      flag_all_reviews:
+        description: 'Test mode: flag every review (even 5-star), not just below 5 stars'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -25,6 +30,7 @@ jobs:
           PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
           PLACE_ID: ${{ secrets.PLACE_ID }}
           BUSINESS_NAME: SOS Septic
+          FLAG_ALL_REVIEWS: ${{ inputs.flag_all_reviews }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}

@@ -16,6 +16,7 @@ const {
   EMAIL_FROM,
   EMAIL_TO,
   ALWAYS_SEND,
+  FLAG_ALL_REVIEWS,
   STATE_PATH = 'state/places-notified.json',
 } = process.env;
 
@@ -36,22 +37,28 @@ if (!res.ok) {
 const place = await res.json();
 
 const reviews = place.reviews ?? [];
-const flagged = reviews.filter((review) => review.rating < 5);
+const flagAllReviews = FLAG_ALL_REVIEWS === 'true';
+const flagged = flagAllReviews ? reviews : reviews.filter((review) => review.rating < 5);
+const criteriaLabel = flagAllReviews ? '(test mode: all ratings)' : 'under 5 stars';
 const name = place.displayName?.text ?? BUSINESS_NAME;
 
 const state = await loadState(STATE_PATH);
 const newlyFlagged = flagged.filter((review) => !state[reviewId(review)]);
 
 console.log(`${name}: overall ${place.rating}★ across ${place.userRatingCount} ratings.`);
-console.log(`Checked the ${reviews.length} most recent reviews; ${flagged.length} below 5 stars (${newlyFlagged.length} new since last run).`);
+console.log(`Checked the ${reviews.length} most recent reviews; ${flagged.length} flagged ${criteriaLabel} (${newlyFlagged.length} new since last run).`);
 
 // Remember every currently-flagged review so re-runs don't re-notify on it,
 // and drop reviews that have aged out of the top 5 so the file doesn't grow forever.
-const nextState = {};
-for (const review of flagged) {
-  nextState[reviewId(review)] = state[reviewId(review)] ?? new Date().toISOString();
+// (In test mode this deliberately doesn't touch the real state file, so it
+// can't mark real reviews as "already notified" and hide them from a real run.)
+if (!flagAllReviews) {
+  const nextState = {};
+  for (const review of flagged) {
+    nextState[reviewId(review)] = state[reviewId(review)] ?? new Date().toISOString();
+  }
+  await saveState(STATE_PATH, nextState);
 }
-await saveState(STATE_PATH, nextState);
 
 if (newlyFlagged.length === 0 && ALWAYS_SEND !== 'true') {
   console.log('No new reviews to flag — skipping email.');
@@ -63,8 +70,8 @@ await sendDigest({
   transport,
   from: EMAIL_FROM,
   to: EMAIL_TO,
-  subject: subjectFor({ name, newlyFlagged }),
-  html: buildHtml({ name, place, reviews, flagged, newlyFlagged }),
-  text: buildText({ name, place, reviews, flagged, newlyFlagged }),
+  subject: subjectFor({ name, newlyFlagged, criteriaLabel }),
+  html: buildHtml({ name, place, reviews, flagged, newlyFlagged, criteriaLabel }),
+  text: buildText({ name, place, reviews, flagged, newlyFlagged, criteriaLabel }),
 });
 console.log(`Emailed results to ${EMAIL_TO}.`);
