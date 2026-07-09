@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node src/index.js",
+    "scan": "node src/places-check.js",
     "get-refresh-token": "node scripts/get-refresh-token.js",
     "list-locations": "node scripts/list-accounts-locations.js"
   },

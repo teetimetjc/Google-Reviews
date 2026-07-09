@@ -104,6 +104,32 @@ The **Google Reviews Check** workflow
 be triggered manually from the Actions tab — use that to test it end to end
 before waiting for the schedule.
 
+## Manual scan (no Business Profile API approval needed)
+
+While waiting for (or instead of) Business Profile API access, the **Manual
+Review Scan (Places API)** workflow scans the listing on demand and emails
+the results — flagged reviews or an "all clear."
+
+Setup:
+
+1. In Google Cloud Console, enable the **Places API (New)** and create an
+   **API key** (APIs & Services → Credentials → Create credentials → API
+   key). Restrict the key to the Places API. Billing must be enabled on the
+   project (Places has a monthly free tier that easily covers this usage).
+2. Find the business's **Place ID** with the
+   [Place ID Finder](https://developers.google.com/maps/documentation/javascript/examples/places-placeid-finder)
+   (search for the business by name).
+3. Add two more repo secrets: `PLACES_API_KEY` and `PLACE_ID` (SMTP/email
+   secrets are shared with the main workflow).
+4. Trigger it any time from the **Actions** tab → *Manual Review Scan
+   (Places API)* → **Run workflow** (works from the GitHub mobile app too).
+
+Limitations: the Places API only returns the **5 most recent reviews** and
+doesn't expose whether the owner has replied — so this is a "what's new"
+check, not full outstanding-review tracking. The scheduled digest
+(`src/index.js`) remains the complete solution once GBP API access is
+approved.
+
 ## Running locally
 
 ```

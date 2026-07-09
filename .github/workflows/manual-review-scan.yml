@@ -1,0 +1,30 @@
+name: Manual Review Scan (Places API)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  scan-reviews:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Scan recent reviews
+        env:
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+          PLACE_ID: ${{ secrets.PLACE_ID }}
+          BUSINESS_NAME: SOS Septic
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: node src/places-check.js
