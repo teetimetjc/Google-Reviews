@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node src/index.js",
     "scan": "node src/places-check.js",
+    "test-email": "node scripts/test-email.js",
     "get-refresh-token": "node scripts/get-refresh-token.js",
     "list-locations": "node scripts/list-accounts-locations.js"
   },
