@@ -1,0 +1,19 @@
+{
+  "name": "google-reviews-automation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pulls Google Business Profile reviews and emails a digest of any review below 5 stars that still needs a reply.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "scan": "node src/places-check.js",
+    "get-refresh-token": "node scripts/get-refresh-token.js",
+    "list-locations": "node scripts/list-accounts-locations.js"
+  },
+  "dependencies": {
+    "nodemailer": "^9.0.1"
+  }
+}
