@@ -130,6 +130,11 @@ check, not full outstanding-review tracking. The scheduled digest
 (`src/index.js`) remains the complete solution once GBP API access is
 approved.
 
+It's safe to run this multiple times a day — `state/places-notified.json`
+tracks which reviews have already been emailed about, so re-running only
+sends an email when a *new* sub-5-star review shows up (or nothing at all,
+if `ALWAYS_SEND` isn't set to `true`).
+
 ## Running locally
 
 ```

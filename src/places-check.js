@@ -6,6 +6,7 @@
 // recent reviews and can't see whether the owner has replied.
 
 import { createTransport, sendDigest } from './email.js';
+import { loadState, saveState } from './state.js';
 
 const {
   PLACES_API_KEY,
@@ -13,6 +14,8 @@ const {
   BUSINESS_NAME = 'your business',
   EMAIL_FROM,
   EMAIL_TO,
+  ALWAYS_SEND,
+  STATE_PATH = 'state/places-notified.json',
 } = process.env;
 
 if (!PLACES_API_KEY || !PLACE_ID) {
@@ -35,15 +38,28 @@ const reviews = place.reviews ?? [];
 const flagged = reviews.filter((review) => review.rating < 5);
 const name = place.displayName?.text ?? BUSINESS_NAME;
 
+const state = await loadState(STATE_PATH);
+const newlyFlagged = flagged.filter((review) => !state[reviewId(review)]);
+
 console.log(`${name}: overall ${place.rating}★ across ${place.userRatingCount} ratings.`);
-console.log(`Checked the ${reviews.length} most recent reviews; ${flagged.length} below 5 stars.`);
+console.log(`Checked the ${reviews.length} most recent reviews; ${flagged.length} below 5 stars (${newlyFlagged.length} new since last run).`);
+
+// Remember every currently-flagged review so re-runs don't re-notify on it,
+// and drop reviews that have aged out of the top 5 so the file doesn't grow forever.
+const nextState = {};
 for (const review of flagged) {
-  console.log(`  ${review.rating}★ — ${review.authorAttribution?.displayName ?? 'Anonymous'} (${review.relativePublishTimeDescription ?? review.publishTime})`);
+  nextState[reviewId(review)] = state[reviewId(review)] ?? new Date().toISOString();
+}
+await saveState(STATE_PATH, nextState);
+
+if (newlyFlagged.length === 0 && ALWAYS_SEND !== 'true') {
+  console.log('No new reviews to flag — skipping email.');
+  process.exit(0);
 }
 
-const subject = flagged.length > 0
-  ? `⭐ ${name}: ${flagged.length} recent review(s) under 5 stars`
-  : `✅ ${name}: no recent reviews under 5 stars`;
+const subject = newlyFlagged.length > 0
+  ? `⭐ ${name}: ${newlyFlagged.length} new review(s) under 5 stars`
+  : `✅ ${name}: no new reviews under 5 stars`;
 
 const transport = createTransport(process.env);
 await sendDigest({
@@ -51,15 +67,21 @@ await sendDigest({
   from: EMAIL_FROM,
   to: EMAIL_TO,
   subject,
-  html: buildHtml({ name, place, reviews, flagged }),
-  text: buildText({ name, place, reviews, flagged }),
+  html: buildHtml({ name, place, reviews, flagged, newlyFlagged }),
+  text: buildText({ name, place, reviews, flagged, newlyFlagged }),
 });
 console.log(`Emailed results to ${EMAIL_TO}.`);
 
-function buildHtml({ name, place, reviews, flagged }) {
+function reviewId(review) {
+  return review.name ?? `${review.authorAttribution?.displayName ?? 'anon'}|${review.publishTime ?? ''}|${review.rating}`;
+}
+
+function buildHtml({ name, place, reviews, flagged, newlyFlagged }) {
+  const newIds = new Set(newlyFlagged.map(reviewId));
   const rows = flagged.map((review) => `
     <div style="border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0;">
       <strong>${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)} (${review.rating}/5)</strong>
+      ${newIds.has(reviewId(review)) ? '<span style="color:#c00;font-weight:bold;"> NEW</span>' : '<span style="color:#666;"> (already flagged previously)</span>'}
       — ${escapeHtml(review.authorAttribution?.displayName ?? 'Anonymous')}
       <span style="color:#666;">(${escapeHtml(review.relativePublishTimeDescription ?? review.publishTime ?? '')})</span>
       <p style="margin:8px 0 0;">${escapeHtml(review.text?.text ?? review.originalText?.text ?? '(no comment left)')}</p>
@@ -69,7 +91,7 @@ function buildHtml({ name, place, reviews, flagged }) {
     <h2>${escapeHtml(name)} — review scan</h2>
     <p>Overall rating: <strong>${place.rating}★</strong> across ${place.userRatingCount} ratings.</p>
     <p>Checked the ${reviews.length} most recent reviews Google exposes:
-      <strong>${flagged.length}</strong> below 5 stars.</p>
+      <strong>${flagged.length}</strong> below 5 stars, <strong>${newlyFlagged.length}</strong> new since the last scan.</p>
     ${rows || '<p>Nothing needs attention right now. 🎉</p>'}
     <p><a href="${escapeHtml(place.googleMapsUri ?? 'https://business.google.com/reviews')}">Open the listing on Google Maps</a>
       &middot; <a href="https://business.google.com/reviews">Reply to reviews</a></p>
@@ -77,15 +99,16 @@ function buildHtml({ name, place, reviews, flagged }) {
       reviews, so older unanswered reviews won't appear here.</p>`;
 }
 
-function buildText({ name, place, reviews, flagged }) {
+function buildText({ name, place, reviews, flagged, newlyFlagged }) {
+  const newIds = new Set(newlyFlagged.map(reviewId));
   const lines = [
     `${name} — review scan`,
     `Overall rating: ${place.rating} stars across ${place.userRatingCount} ratings.`,
-    `Checked the ${reviews.length} most recent reviews; ${flagged.length} below 5 stars.`,
+    `Checked the ${reviews.length} most recent reviews; ${flagged.length} below 5 stars, ${newlyFlagged.length} new since the last scan.`,
     '',
   ];
   for (const review of flagged) {
-    lines.push(`${review.rating}/5 — ${review.authorAttribution?.displayName ?? 'Anonymous'} (${review.relativePublishTimeDescription ?? review.publishTime ?? ''})`);
+    lines.push(`${review.rating}/5${newIds.has(reviewId(review)) ? ' [NEW]' : ' [already flagged]'} — ${review.authorAttribution?.displayName ?? 'Anonymous'} (${review.relativePublishTimeDescription ?? review.publishTime ?? ''})`);
     lines.push(review.text?.text ?? review.originalText?.text ?? '(no comment left)');
     lines.push('');
   }
