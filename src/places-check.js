@@ -26,7 +26,9 @@ if (!PLACES_API_KEY || !PLACE_ID) {
   process.exit(1);
 }
 
-const res = await fetch(`https://places.googleapis.com/v1/places/${PLACE_ID}`, {
+// reviewsSort=NEWEST is required — without it, Google defaults to "most
+// relevant" reviews, which are not necessarily the most recent ones.
+const res = await fetch(`https://places.googleapis.com/v1/places/${PLACE_ID}?reviewsSort=NEWEST`, {
   headers: {
     'X-Goog-Api-Key': PLACES_API_KEY,
     'X-Goog-FieldMask': 'displayName,rating,userRatingCount,googleMapsUri,reviews',
