@@ -2,8 +2,9 @@
 //
 // Unlike src/index.js (which needs approved Business Profile API access),
 // this works with any Google Cloud project that has the Places API (New)
-// enabled and an API key. Limitations: Places only returns the 5 most
-// recent reviews and can't see whether the owner has replied.
+// enabled and an API key. Limitations: Places only returns up to 5 reviews,
+// chosen by Google's own "relevance" ranking (not necessarily the newest),
+// and can't see whether the owner has replied.
 
 import { createTransport, sendDigest } from './email.js';
 import { loadState, saveState } from './state.js';
@@ -26,9 +27,10 @@ if (!PLACES_API_KEY || !PLACE_ID) {
   process.exit(1);
 }
 
-// reviewsSort=NEWEST is required — without it, Google defaults to "most
-// relevant" reviews, which are not necessarily the most recent ones.
-const res = await fetch(`https://places.googleapis.com/v1/places/${PLACE_ID}?reviewsSort=NEWEST`, {
+// Places API (New) doesn't support sorting reviews by recency — Google
+// always returns its own "most relevant" pick of up to 5 reviews, and
+// there's no documented way to override that.
+const res = await fetch(`https://places.googleapis.com/v1/places/${PLACE_ID}`, {
   headers: {
     'X-Goog-Api-Key': PLACES_API_KEY,
     'X-Goog-FieldMask': 'displayName,rating,userRatingCount,googleMapsUri,reviews',
@@ -52,7 +54,7 @@ const state = await loadState(activeStatePath);
 const newlyFlagged = flagged.filter((review) => !state[reviewId(review)]);
 
 console.log(`${name}: overall ${place.rating}★ across ${place.userRatingCount} ratings.`);
-console.log(`Checked the ${reviews.length} most recent reviews; ${flagged.length} flagged ${criteriaLabel} (${newlyFlagged.length} new since last run).`);
+console.log(`Checked the ${reviews.length} reviews Google currently surfaces; ${flagged.length} flagged ${criteriaLabel} (${newlyFlagged.length} new since last run).`);
 
 // Remember every currently-flagged review so re-runs don't re-notify on it,
 // and drop reviews that have aged out of the top 5 so the file doesn't grow forever.

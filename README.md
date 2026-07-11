@@ -124,11 +124,13 @@ Setup:
 4. Trigger it any time from the **Actions** tab → *Manual Review Scan
    (Places API)* → **Run workflow** (works from the GitHub mobile app too).
 
-Limitations: the Places API only returns the **5 most recent reviews** and
-doesn't expose whether the owner has replied — so this is a "what's new"
-check, not full outstanding-review tracking. The scheduled digest
-(`src/index.js`) remains the complete solution once GBP API access is
-approved.
+Limitations: the Places API only returns **up to 5 reviews**, chosen by
+Google's own "relevance" ranking — **not necessarily the most recent ones**,
+and there's no documented way to change that. It also doesn't expose
+whether the owner has replied. So this is a "here's what Google is
+currently showing" check, not guaranteed-complete coverage of new or
+outstanding reviews. The scheduled digest (`src/index.js`) remains the
+complete, accurate solution once GBP API access is approved.
 
 It's safe to run this multiple times a day — `state/places-notified.json`
 tracks which reviews have already been emailed about, so re-running only

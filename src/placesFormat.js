@@ -22,13 +22,15 @@ export function buildHtml({ name, place, reviews, flagged, newlyFlagged, criteri
   return `
     <h2>${escapeHtml(name)} — review scan</h2>
     <p>Overall rating: <strong>${place.rating}★</strong> across ${place.userRatingCount} ratings.</p>
-    <p>Checked the ${reviews.length} most recent reviews Google exposes:
+    <p>Checked the ${reviews.length} reviews Google currently surfaces (its own "most
+      relevant" pick — not necessarily the newest):
       <strong>${flagged.length}</strong> ${criteriaLabel}, <strong>${newlyFlagged.length}</strong> new since the last scan.</p>
     ${rows || '<p>Nothing needs attention right now. 🎉</p>'}
     <p><a href="${escapeHtml(place.googleMapsUri ?? 'https://business.google.com/reviews')}">Open the listing on Google Maps</a>
       &middot; <a href="https://business.google.com/reviews">Reply to reviews</a></p>
-    <p style="color:#666;font-size:12px;">Note: the Places API only exposes the 5 most recent
-      reviews, so older unanswered reviews won't appear here.</p>`;
+    <p style="color:#666;font-size:12px;">Note: the Places API only exposes up to 5 reviews,
+      chosen by Google's own relevance ranking, so a review may not show up here even if
+      it's very recent — and older unanswered reviews may not appear either.</p>`;
 }
 
 export function buildText({ name, place, reviews, flagged, newlyFlagged, criteriaLabel }) {
@@ -36,7 +38,7 @@ export function buildText({ name, place, reviews, flagged, newlyFlagged, criteri
   const lines = [
     `${name} — review scan`,
     `Overall rating: ${place.rating} stars across ${place.userRatingCount} ratings.`,
-    `Checked the ${reviews.length} most recent reviews; ${flagged.length} ${criteriaLabel}, ${newlyFlagged.length} new since the last scan.`,
+    `Checked the ${reviews.length} reviews Google currently surfaces (its own relevance pick, not necessarily newest); ${flagged.length} ${criteriaLabel}, ${newlyFlagged.length} new since the last scan.`,
     '',
   ];
   for (const review of flagged) {
