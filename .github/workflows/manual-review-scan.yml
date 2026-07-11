@@ -1,8 +1,8 @@
 name: Manual Review Scan (Places API)
 
 on:
-  schedule:
-    - cron: '0 * * * *'
+  # Paused while waiting on Google's Business Profile API access approval
+  # (case 7-6946000041626). Re-add a `schedule:` trigger once ready to go live.
   workflow_dispatch:
     inputs:
       flag_all_reviews:
