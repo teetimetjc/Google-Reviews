@@ -1,8 +1,8 @@
 name: Manual Review Scan (Places API)
 
 on:
-  # Paused while waiting on Google's Business Profile API access approval
-  # (case 7-6946000041626). Re-add a `schedule:` trigger once ready to go live.
+  # Paused until a manual run confirms real (non-preview) behavior looks
+  # right. Re-add a `schedule:` trigger once confirmed.
   workflow_dispatch:
     inputs:
       flag_all_reviews:
@@ -30,9 +30,7 @@ jobs:
           PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
           PLACE_ID: ${{ secrets.PLACE_ID }}
           BUSINESS_NAME: SOS Septic
-          # TEMPORARY: previewing every review (not just <5 stars) so we can see
-          # real formatted emails. Set back to 'false' before handing this off.
-          FLAG_ALL_REVIEWS: 'true'
+          FLAG_ALL_REVIEWS: ${{ inputs.flag_all_reviews }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
