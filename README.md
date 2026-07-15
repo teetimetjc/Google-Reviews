@@ -1,22 +1,20 @@
 # Google Reviews Automation
 
-Pulls reviews from a company's Google Business Profile, flags every review that
-isn't 5 stars and hasn't been replied to yet, and emails a digest so the
-company knows what needs a response.
+Pulls reviews from a company's Google Business Profile and emails a digest
+whenever a new one shows up, so the company knows what's been posted and can
+respond quickly.
 
 ## How it works
 
-- `src/index.js` runs on a schedule (GitHub Actions cron, daily by default).
-- It authenticates to the Google Business Profile API using a stored OAuth
-  refresh token.
-- For each location configured in `config/locations.json`, it fetches every
-  review and filters to the ones with `starRating < 5` and no `reviewReply`.
-- If any are found, it emails a digest (rating, reviewer, comment, days
-  outstanding, link to reply) to `EMAIL_TO`.
-- It tracks the "first flagged" date per review in `state/notified.json`
-  (committed back to the repo by the workflow) so a review stays in every
-  digest until it's answered, and the email can show how long it's been
-  waiting.
+The working, live solution is the **Places API scan**
+(`src/places-check.js`) — see "Manual scan" below for full details. It runs
+hourly via GitHub Actions, checks the reviews Google currently surfaces for
+the listing, and emails only when something new appears.
+
+`src/index.js` was the originally-planned scheduled digest via the
+Business Profile Reviews API (`starRating < 5` and no `reviewReply`,
+tracked in `state/notified.json`), but it's effectively retired — see the
+"Manual scan" section for why.
 
 ## One-time setup
 
@@ -129,13 +127,21 @@ Google's own "relevance" ranking — **not necessarily the most recent ones**,
 and there's no documented way to change that. It also doesn't expose
 whether the owner has replied. So this is a "here's what Google is
 currently showing" check, not guaranteed-complete coverage of new or
-outstanding reviews. The scheduled digest (`src/index.js`) remains the
-complete, accurate solution once GBP API access is approved.
+outstanding reviews.
 
-It's safe to run this multiple times a day — `state/places-notified.json`
-tracks which reviews have already been emailed about, so re-running only
-sends an email when a *new* sub-5-star review shows up (or nothing at all,
-if `ALWAYS_SEND` isn't set to `true`).
+`src/index.js` (the scheduled digest via the legacy Business Profile
+Reviews API) is effectively retired: Google no longer grants new projects
+access to `mybusiness.googleapis.com`, the endpoint it depends on, even
+with Business Profile API access approved. This Places-based scan is the
+working solution.
+
+It's safe to run this multiple times a day (it runs hourly by default) —
+`state/places-notified.json` tracks which reviews have already been
+emailed about, so re-running only sends an email when a *new* review shows
+up (or nothing at all, if `ALWAYS_SEND` isn't set to `true`). By default it
+notifies on a new review of **any** rating; set the `ONLY_FLAG_BELOW_5` env
+var to `'true'` in the workflow to go back to only flagging reviews under
+5 stars.
 
 ## Running locally
 
@@ -146,11 +152,11 @@ export $(grep -v '^#' .env | xargs)
 npm start
 ```
 
-## Notes / limitations
+## Notes / limitations (src/index.js, retired)
 
-- Uses the legacy `mybusiness.googleapis.com/v4` Reviews endpoint, which is
-  still required for reading/replying to reviews even though most other
-  Business Profile resources have moved to newer APIs.
+- Uses the legacy `mybusiness.googleapis.com/v4` Reviews endpoint. As of
+  this writing, Google no longer grants new Cloud projects access to this
+  API, so this script can't run — kept in the repo in case that changes.
 - No email is sent when there's nothing to flag, unless `ALWAYS_SEND=true`.
 - A flagged review stays in the digest every day until it gets a reply or
   its rating becomes 5★ — so missing a day's email won't cause anything to

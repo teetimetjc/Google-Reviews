@@ -17,9 +17,8 @@ const {
   EMAIL_FROM,
   EMAIL_TO,
   ALWAYS_SEND,
-  FLAG_ALL_REVIEWS,
+  ONLY_FLAG_BELOW_5,
   STATE_PATH = 'state/places-notified.json',
-  PREVIEW_STATE_PATH = 'state/places-notified-preview.json',
 } = process.env;
 
 if (!PLACES_API_KEY || !PLACE_ID) {
@@ -27,9 +26,6 @@ if (!PLACES_API_KEY || !PLACE_ID) {
   process.exit(1);
 }
 
-// Places API (New) doesn't support sorting reviews by recency — Google
-// always returns its own "most relevant" pick of up to 5 reviews, and
-// there's no documented way to override that.
 const res = await fetch(`https://places.googleapis.com/v1/places/${PLACE_ID}`, {
   headers: {
     'X-Goog-Api-Key': PLACES_API_KEY,
@@ -42,15 +38,15 @@ if (!res.ok) {
 const place = await res.json();
 
 const reviews = place.reviews ?? [];
-const flagAllReviews = FLAG_ALL_REVIEWS === 'true';
-const flagged = flagAllReviews ? reviews : reviews.filter((review) => review.rating < 5);
-const criteriaLabel = flagAllReviews ? '(preview mode: all ratings)' : 'under 5 stars';
+// Currently notifying on every new review regardless of rating. Set
+// ONLY_FLAG_BELOW_5=true (repo secret/variable) to go back to only
+// flagging reviews under 5 stars.
+const onlyBelow5 = ONLY_FLAG_BELOW_5 === 'true';
+const flagged = onlyBelow5 ? reviews.filter((review) => review.rating < 5) : reviews;
+const criteriaLabel = onlyBelow5 ? 'under 5 stars' : '(any rating)';
 const name = place.displayName?.text ?? BUSINESS_NAME;
 
-// Preview mode (FLAG_ALL_REVIEWS) uses its own state file so it can dedupe
-// independently without touching the real under-5-stars tracking.
-const activeStatePath = flagAllReviews ? PREVIEW_STATE_PATH : STATE_PATH;
-const state = await loadState(activeStatePath);
+const state = await loadState(STATE_PATH);
 const newlyFlagged = flagged.filter((review) => !state[reviewId(review)]);
 
 console.log(`${name}: overall ${place.rating}★ across ${place.userRatingCount} ratings.`);
@@ -62,7 +58,7 @@ const nextState = {};
 for (const review of flagged) {
   nextState[reviewId(review)] = state[reviewId(review)] ?? new Date().toISOString();
 }
-await saveState(activeStatePath, nextState);
+await saveState(STATE_PATH, nextState);
 
 if (newlyFlagged.length === 0 && ALWAYS_SEND !== 'true') {
   console.log('No new reviews to flag — skipping email.');
