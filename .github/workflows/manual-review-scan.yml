@@ -1,8 +1,9 @@
 name: Manual Review Scan (Places API)
 
 on:
-  schedule:
-    - cron: '0 * * * *'
+  # Paused: Places API only returns Google's "most relevant" top 5 reviews,
+  # not guaranteed to be the newest — not good enough as a standing cron
+  # until we find a better data source. See README "Manual scan" section.
   workflow_dispatch: {}
 
 permissions:
