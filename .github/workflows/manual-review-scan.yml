@@ -1,8 +1,8 @@
 name: Manual Review Scan (Places API)
 
 on:
-  # Paused until a manual run confirms real (non-preview) behavior looks
-  # right. Re-add a `schedule:` trigger once confirmed.
+  schedule:
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       flag_all_reviews:
