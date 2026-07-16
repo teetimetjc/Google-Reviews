@@ -6,15 +6,22 @@ respond quickly.
 
 ## How it works
 
-The working, live solution is the **Places API scan**
-(`src/places-check.js`) — see "Manual scan" below for full details. It runs
-hourly via GitHub Actions, checks the reviews Google currently surfaces for
-the listing, and emails only when something new appears.
+- `src/index.js` runs on a schedule (GitHub Actions cron, daily by default).
+- It authenticates to the Google Business Profile API using a stored OAuth
+  refresh token.
+- For each location configured in `config/locations.json`, it fetches every
+  review and filters to the ones with `starRating < 5` and no `reviewReply`.
+- If any are found, it emails a digest (rating, reviewer, comment, days
+  outstanding, link to reply) to `EMAIL_TO`.
+- It tracks the "first flagged" date per review in `state/notified.json`
+  (committed back to the repo by the workflow) so a review stays in every
+  digest until it's answered, and the email can show how long it's been
+  waiting.
 
-`src/index.js` was the originally-planned scheduled digest via the
-Business Profile Reviews API (`starRating < 5` and no `reviewReply`,
-tracked in `state/notified.json`), but it's effectively retired — see the
-"Manual scan" section for why.
+There's also a secondary **Places API scan** (`src/places-check.js`, see
+"Manual scan" below) that was built as a stopgap while the Business Profile
+Reviews API was inaccessible. It's currently paused now that the real
+digest above is working, but it's still there as a fallback.
 
 ## One-time setup
 
@@ -102,13 +109,23 @@ The **Google Reviews Check** workflow
 be triggered manually from the Actions tab — use that to test it end to end
 before waiting for the schedule.
 
-## Manual scan (no Business Profile API approval needed)
+## Manual scan (fallback — currently paused)
 
-While waiting for (or instead of) Business Profile API access, the **Manual
-Review Scan (Places API)** workflow scans the listing on demand and emails
-the results — flagged reviews or an "all clear."
+`src/places-check.js` / the **Manual Review Scan (Places API)** workflow
+was built as a stopgap for when `mybusiness.googleapis.com` (the legacy
+Reviews API `src/index.js` depends on) couldn't be enabled for this
+project. That access issue turned out to be transient — enabling the API
+via `gcloud services enable mybusiness.googleapis.com` eventually
+succeeded after a retry — so the main digest is the working solution now,
+and this fallback is paused (no `schedule:` trigger in
+`.github/workflows/manual-review-scan.yml`).
 
-Setup:
+Its limitations, if it's ever needed again: the Places API only returns
+**up to 5 reviews**, chosen by Google's own "relevance" ranking — **not
+necessarily the most recent ones**, with no documented way to change that.
+It also doesn't expose whether the owner has replied.
+
+Setup, if re-enabling it:
 
 1. In Google Cloud Console, enable the **Places API (New)** and create an
    **API key** (APIs & Services → Credentials → Create credentials → API
@@ -119,23 +136,10 @@ Setup:
    (search for the business by name).
 3. Add two more repo secrets: `PLACES_API_KEY` and `PLACE_ID` (SMTP/email
    secrets are shared with the main workflow).
-4. Trigger it any time from the **Actions** tab → *Manual Review Scan
-   (Places API)* → **Run workflow** (works from the GitHub mobile app too).
+4. Add a `schedule:` trigger back to `.github/workflows/manual-review-scan.yml`,
+   or trigger it manually from the **Actions** tab → *Manual Review Scan
+   (Places API)* → **Run workflow**.
 
-Limitations: the Places API only returns **up to 5 reviews**, chosen by
-Google's own "relevance" ranking — **not necessarily the most recent ones**,
-and there's no documented way to change that. It also doesn't expose
-whether the owner has replied. So this is a "here's what Google is
-currently showing" check, not guaranteed-complete coverage of new or
-outstanding reviews.
-
-`src/index.js` (the scheduled digest via the legacy Business Profile
-Reviews API) is effectively retired: Google no longer grants new projects
-access to `mybusiness.googleapis.com`, the endpoint it depends on, even
-with Business Profile API access approved. This Places-based scan is the
-working solution.
-
-It's safe to run this multiple times a day (it runs hourly by default) —
 `state/places-notified.json` tracks which reviews have already been
 emailed about, so re-running only sends an email when a *new* review shows
 up (or nothing at all, if `ALWAYS_SEND` isn't set to `true`). By default it
@@ -152,11 +156,16 @@ export $(grep -v '^#' .env | xargs)
 npm start
 ```
 
-## Notes / limitations (src/index.js, retired)
+## Notes / limitations
 
-- Uses the legacy `mybusiness.googleapis.com/v4` Reviews endpoint. As of
-  this writing, Google no longer grants new Cloud projects access to this
-  API, so this script can't run — kept in the repo in case that changes.
+- Uses the legacy `mybusiness.googleapis.com/v4` Reviews endpoint, which is
+  still required for reading/replying to reviews even though most other
+  Business Profile resources have moved to newer APIs. If this API ever
+  shows `403 SERVICE_DISABLED` for a project, try enabling it via
+  `gcloud services enable mybusiness.googleapis.com --project=<id>` in
+  Cloud Shell — the Console's "Enable" page has been unreliable for this
+  particular API, and the gcloud command may report a transient-looking
+  "Regional Access Boundary" error before eventually succeeding; retry it.
 - No email is sent when there's nothing to flag, unless `ALWAYS_SEND=true`.
 - A flagged review stays in the digest every day until it gets a reply or
   its rating becomes 5★ — so missing a day's email won't cause anything to
