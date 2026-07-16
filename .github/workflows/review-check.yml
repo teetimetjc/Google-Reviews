@@ -31,6 +31,8 @@ jobs:
           # Revert both to restore the real below-5-only behavior.
           ONLY_FLAG_BELOW_5: 'false'
           NOTIFY_ONLY_NEW: 'true'
+          SHEETS_SPREADSHEET_ID: '1Z9LMHgyGm3VEI3TojUxfUg6c01MI5CMLmUmnSUl-nCw'
+          GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}

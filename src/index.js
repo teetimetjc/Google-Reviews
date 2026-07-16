@@ -4,6 +4,7 @@ import path from 'node:path';
 import { getAccessToken, fetchAllReviews, starRatingToNumber } from './googleBusinessProfile.js';
 import { loadState, saveState } from './state.js';
 import { createTransport, sendDigest } from './email.js';
+import { syncReviewsToSheet } from './sheetsSync.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATE_PATH = path.join(__dirname, '..', 'state', 'notified.json');
@@ -57,6 +58,26 @@ function buildText(sections, emptyMessage) {
     .join('\n\n');
 }
 
+function statusFor(stars, hasReply) {
+  if (hasReply) return 'Replied';
+  return stars < 5 ? 'Needs Response' : '5★, no action needed';
+}
+
+// [Date, Rating, Review, Reviewer, Replied?, Reply Text, Status, Review ID]
+function sheetRowFor(review, stars) {
+  const hasReply = Boolean(review.reviewReply);
+  return [
+    review.createTime || '',
+    stars,
+    review.comment || '',
+    review.reviewer?.displayName || 'Anonymous',
+    hasReply ? 'Yes' : 'No',
+    review.reviewReply?.comment || '',
+    statusFor(stars, hasReply),
+    review.name,
+  ];
+}
+
 async function main() {
   const {
     GOOGLE_CLIENT_ID,
@@ -67,6 +88,8 @@ async function main() {
     ALWAYS_SEND,
     ONLY_FLAG_BELOW_5,
     NOTIFY_ONLY_NEW,
+    SHEETS_SPREADSHEET_ID,
+    GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY,
   } = process.env;
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REFRESH_TOKEN) {
@@ -81,6 +104,10 @@ async function main() {
   // to instead get a one-time alert for every new review of any rating,
   // as soon as it appears — useful for confirming the pipeline is alive
   // without waiting for a genuinely low review to show up.
+  //
+  // This filter only affects which reviews trigger an EMAIL — every review
+  // is always tracked and logged to the Google Sheet (if configured),
+  // regardless of this setting.
   const onlyBelow5 = ONLY_FLAG_BELOW_5 !== 'false';
   const onlyNew = NOTIFY_ONLY_NEW === 'true';
   const emptyMessage = onlyBelow5
@@ -102,6 +129,7 @@ async function main() {
   const previousState = await loadState(STATE_PATH);
   const newState = {};
   const sections = [];
+  const sheetRows = [];
   let totalFlagged = 0;
 
   for (const location of locations) {
@@ -113,12 +141,22 @@ async function main() {
     for (const review of reviews) {
       const stars = starRatingToNumber(review.starRating);
       if (stars === null) continue;
-      if (onlyBelow5 && (stars >= 5 || review.reviewReply)) continue;
 
-      const isNew = !previousState[review.name];
-      const firstSeenAt = previousState[review.name]?.firstSeenAt ?? new Date().toISOString();
-      newState[review.name] = { firstSeenAt, rating: review.starRating };
+      const prev = previousState[review.name];
+      const hasReply = Boolean(review.reviewReply);
+      const isNew = !prev;
+      const firstSeenAt = prev?.firstSeenAt ?? new Date().toISOString();
 
+      newState[review.name] = {
+        firstSeenAt,
+        rating: review.starRating,
+        hasReply,
+        updateTime: review.updateTime,
+      };
+
+      sheetRows.push(sheetRowFor(review, stars));
+
+      if (onlyBelow5 && (stars >= 5 || hasReply)) continue;
       if (onlyNew && !isNew) continue;
 
       flagged.push({ review, stars, outstandingDays: daysSince(firstSeenAt), isNew });
@@ -131,6 +169,19 @@ async function main() {
   }
 
   await saveState(STATE_PATH, newState);
+
+  if (SHEETS_SPREADSHEET_ID && GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY) {
+    try {
+      const result = await syncReviewsToSheet({
+        spreadsheetId: SHEETS_SPREADSHEET_ID,
+        serviceAccountKeyJson: GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY,
+        rows: sheetRows,
+      });
+      console.log(`Sheet sync: ${result.updated} updated, ${result.added} added.`);
+    } catch (err) {
+      console.error('Sheet sync failed (continuing without it):', err.message);
+    }
+  }
 
   if (!totalFlagged && ALWAYS_SEND !== 'true') {
     console.log(emptyMessage, 'No email sent.');
