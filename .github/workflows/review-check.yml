@@ -25,6 +25,12 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          # TEMPORARY: alert on every new review (any rating) instead of
+          # only below-5-star, so we can confirm the pipeline is catching
+          # new activity without waiting for a low review to occur.
+          # Revert both to restore the real below-5-only behavior.
+          ONLY_FLAG_BELOW_5: 'false'
+          NOTIFY_ONLY_NEW: 'true'
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
