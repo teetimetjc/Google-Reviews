@@ -78,6 +78,18 @@ function sheetRowFor(review, stars) {
   ];
 }
 
+// [Detected At, Location, Change Type, Reviewer, Rating, Comment]
+function changeRowFor(type, review, stars, locationName) {
+  return [
+    new Date().toISOString(),
+    locationName,
+    type,
+    review.reviewer?.displayName || 'Anonymous',
+    stars,
+    review.comment || '',
+  ];
+}
+
 async function main() {
   const {
     GOOGLE_CLIENT_ID,
@@ -130,6 +142,7 @@ async function main() {
   const newState = {};
   const sections = [];
   const sheetRows = [];
+  const changeRows = [];
   let totalFlagged = 0;
 
   for (const location of locations) {
@@ -146,6 +159,8 @@ async function main() {
       const hasReply = Boolean(review.reviewReply);
       const isNew = !prev;
       const firstSeenAt = prev?.firstSeenAt ?? new Date().toISOString();
+      const replyJustAdded = hasReply && prev && !prev.hasReply;
+      const wasEdited = prev && review.updateTime && prev.updateTime && review.updateTime !== prev.updateTime;
 
       newState[review.name] = {
         firstSeenAt,
@@ -155,6 +170,9 @@ async function main() {
       };
 
       sheetRows.push(sheetRowFor(review, stars));
+      if (isNew) changeRows.push(changeRowFor('New review', review, stars, name));
+      else if (replyJustAdded) changeRows.push(changeRowFor('Reply posted', review, stars, name));
+      else if (wasEdited) changeRows.push(changeRowFor('Review edited', review, stars, name));
 
       if (onlyBelow5 && (stars >= 5 || hasReply)) continue;
       if (onlyNew && !isNew) continue;
@@ -176,8 +194,9 @@ async function main() {
         spreadsheetId: SHEETS_SPREADSHEET_ID,
         serviceAccountKeyJson: GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY,
         rows: sheetRows,
+        changes: changeRows,
       });
-      console.log(`Sheet sync: ${result.updated} updated, ${result.added} added.`);
+      console.log(`Sheet sync: ${result.updated} updated, ${result.added} added, ${result.changesLogged} change(s) logged.`);
     } catch (err) {
       console.error('Sheet sync failed (continuing without it):', err.message);
     }
