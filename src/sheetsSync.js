@@ -4,8 +4,8 @@
 //
 // "Reviews Log" tab: one row per review, upserted in place and kept
 // sorted newest-first — a new review gets appended, an existing one
-// (e.g. once it gets a reply) gets its row updated. Column H (Review ID)
-// is an internal key used to match rows on re-runs.
+// (e.g. once it gets a reply) gets its row updated. The last column
+// (Review ID) is an internal key used to match rows on re-runs.
 //
 // "Change Log" tab: append-only history — every detected new review,
 // reply, or edit gets its own row, sorted newest-first, and is never
@@ -15,7 +15,12 @@
 import { createSign } from 'node:crypto';
 
 const REVIEWS_TAB = 'Reviews Log';
-const REVIEWS_HEADERS = ['Date', 'Rating', 'Review', 'Reviewer', 'Replied?', 'Reply Text', 'Status', 'Review ID'];
+const REVIEWS_HEADERS = [
+  'Date', 'Rating', 'Review', 'Reviewer', 'Anonymous?', 'Reviewer Photo',
+  'Edited?', 'Last Updated', 'Replied?', 'Reply Text', 'Reply Date',
+  'Status', 'Review ID',
+];
+const REVIEWS_LAST_COL = String.fromCharCode(64 + REVIEWS_HEADERS.length); // 'M'
 
 const CHANGE_LOG_TAB = 'Change Log';
 const CHANGE_LOG_HEADERS = ['Detected At', 'Location', 'Change Type', 'Reviewer', 'Rating', 'Comment'];
@@ -122,13 +127,15 @@ async function sortNewestFirst(accessToken, spreadsheetId, sheetId, columnCount,
   });
 }
 
-// `rows` items: [date, rating, review, reviewer, repliedYesNo, replyText, status, reviewId]
+// `rows` items (matches REVIEWS_HEADERS order, Review ID always last):
+//   [date, rating, review, reviewer, anonymous, photoUrl, edited, lastUpdated,
+//    repliedYesNo, replyText, replyDate, status, reviewId]
 // `changes` items: [detectedAt, location, changeType, reviewer, rating, comment]
 export async function syncReviewsToSheet({ spreadsheetId, serviceAccountKeyJson, rows, changes }) {
   const accessToken = await getAccessToken(serviceAccountKeyJson);
   const reviewsSheetId = await ensureTabAndHeaders(accessToken, spreadsheetId, REVIEWS_TAB, REVIEWS_HEADERS);
 
-  const idRange = encodeURIComponent(`${REVIEWS_TAB}!H2:H`);
+  const idRange = encodeURIComponent(`${REVIEWS_TAB}!${REVIEWS_LAST_COL}2:${REVIEWS_LAST_COL}`);
   const idRes = await sheetsRequest(accessToken, `${spreadsheetId}/values/${idRange}`);
   const existingIds = (idRes.values ?? []).map((r) => r[0]);
   const idToRow = new Map(existingIds.map((id, i) => [id, i + 2])); // row 1 is the header
@@ -136,10 +143,10 @@ export async function syncReviewsToSheet({ spreadsheetId, serviceAccountKeyJson,
   const updates = [];
   const newRows = [];
   for (const row of rows) {
-    const reviewId = row[7];
+    const reviewId = row[row.length - 1];
     const rowNumber = idToRow.get(reviewId);
     if (rowNumber) {
-      updates.push({ range: `${REVIEWS_TAB}!A${rowNumber}:H${rowNumber}`, values: [row] });
+      updates.push({ range: `${REVIEWS_TAB}!A${rowNumber}:${REVIEWS_LAST_COL}${rowNumber}`, values: [row] });
     } else {
       newRows.push(row);
     }

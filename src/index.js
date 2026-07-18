@@ -63,16 +63,23 @@ function statusFor(stars, hasReply) {
   return stars < 5 ? 'Needs Response' : '5★, no action needed';
 }
 
-// [Date, Rating, Review, Reviewer, Replied?, Reply Text, Status, Review ID]
+// [Date, Rating, Review, Reviewer, Anonymous?, Reviewer Photo, Edited?,
+//  Last Updated, Replied?, Reply Text, Reply Date, Status, Review ID]
 function sheetRowFor(review, stars) {
   const hasReply = Boolean(review.reviewReply);
+  const edited = review.updateTime && review.createTime && review.updateTime !== review.createTime;
   return [
     review.createTime || '',
     stars,
     review.comment || '',
     review.reviewer?.displayName || 'Anonymous',
+    review.reviewer?.isAnonymous ? 'Yes' : 'No',
+    review.reviewer?.profilePhotoUrl || '',
+    edited ? 'Yes' : 'No',
+    review.updateTime || '',
     hasReply ? 'Yes' : 'No',
     review.reviewReply?.comment || '',
+    review.reviewReply?.updateTime || '',
     statusFor(stars, hasReply),
     review.name,
   ];
@@ -100,6 +107,7 @@ async function main() {
     ALWAYS_SEND,
     ONLY_FLAG_BELOW_5,
     NOTIFY_ONLY_NEW,
+    NEW_REVIEW_CUTOFF,
     SHEETS_SPREADSHEET_ID,
     GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY,
   } = process.env;
@@ -122,6 +130,11 @@ async function main() {
   // regardless of this setting.
   const onlyBelow5 = ONLY_FLAG_BELOW_5 !== 'false';
   const onlyNew = NOTIFY_ONLY_NEW === 'true';
+  // Guards against Google exposing an old review late (it becomes "new" to
+  // our tracker even though it was posted long ago) — only reviews actually
+  // POSTED on/after this cutoff can trigger an email under NOTIFY_ONLY_NEW.
+  // Sheet logging is never affected by this.
+  const newReviewCutoff = NEW_REVIEW_CUTOFF ? new Date(NEW_REVIEW_CUTOFF) : null;
   const emptyMessage = onlyBelow5
     ? 'No reviews below 5 stars are currently awaiting a response.'
     : 'No new reviews since the last check.';
@@ -176,6 +189,7 @@ async function main() {
 
       if (onlyBelow5 && (stars >= 5 || hasReply)) continue;
       if (onlyNew && !isNew) continue;
+      if (onlyNew && newReviewCutoff && (!review.createTime || new Date(review.createTime) < newReviewCutoff)) continue;
 
       flagged.push({ review, stars, outstandingDays: daysSince(firstSeenAt), isNew });
     }
