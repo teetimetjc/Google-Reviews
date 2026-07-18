@@ -80,7 +80,9 @@ async function sheetsRequest(accessToken, pathAndQuery, options = {}) {
 }
 
 // Returns the tab's numeric sheetId (needed for sort requests), creating
-// the tab and/or its header row first if they don't exist yet.
+// the tab if needed and always keeping row 1 in sync with `headers` (so a
+// header-set change, like adding new columns, takes effect immediately
+// instead of leaving stale headers from a previous version).
 async function ensureTabAndHeaders(accessToken, spreadsheetId, title, headers) {
   const meta = await sheetsRequest(accessToken, `${spreadsheetId}?fields=sheets.properties(title,sheetId)`);
   let sheet = meta.sheets?.find((s) => s.properties.title === title);
@@ -92,16 +94,11 @@ async function ensureTabAndHeaders(accessToken, spreadsheetId, title, headers) {
     sheet = created.replies[0].addSheet;
   }
 
-  const lastCol = String.fromCharCode(64 + headers.length); // e.g. 8 headers -> 'H'
-  const headerRange = encodeURIComponent(`${title}!A1:${lastCol}1`);
-  const headerRes = await sheetsRequest(accessToken, `${spreadsheetId}/values/${headerRange}`);
-  if (!headerRes.values?.length) {
-    const putRange = encodeURIComponent(`${title}!A1`);
-    await sheetsRequest(accessToken, `${spreadsheetId}/values/${putRange}?valueInputOption=RAW`, {
-      method: 'PUT',
-      body: JSON.stringify({ values: [headers] }),
-    });
-  }
+  const putRange = encodeURIComponent(`${title}!A1`);
+  await sheetsRequest(accessToken, `${spreadsheetId}/values/${putRange}?valueInputOption=RAW`, {
+    method: 'PUT',
+    body: JSON.stringify({ values: [headers] }),
+  });
 
   return sheet.properties.sheetId;
 }
