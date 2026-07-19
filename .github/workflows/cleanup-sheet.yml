@@ -1,0 +1,22 @@
+name: Clean Up Duplicate Sheet Rows
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Remove stale rows from Reviews Log
+        env:
+          SHEETS_SPREADSHEET_ID: '1Z9LMHgyGm3VEI3TojUxfUg6c01MI5CMLmUmnSUl-nCw'
+          GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY }}
+        run: node scripts/cleanup-duplicate-review-rows.js

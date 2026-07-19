@@ -2,7 +2,7 @@ name: Google Reviews Check
 
 on:
   schedule:
-    - cron: '0 13 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -25,6 +25,18 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          # TEMPORARY: alert on every new review (any rating) instead of
+          # only below-5-star, so we can confirm the pipeline is catching
+          # new activity without waiting for a low review to occur.
+          # Revert both to restore the real below-5-only behavior.
+          ONLY_FLAG_BELOW_5: 'false'
+          NOTIFY_ONLY_NEW: 'true'
+          # Only reviews actually posted on/after this date can trigger an
+          # email, even in NOTIFY_ONLY_NEW mode — avoids false alerts when
+          # Google exposes an old review late (see the "Mike" incident).
+          NEW_REVIEW_CUTOFF: '2026-07-18T00:00:00Z'
+          SHEETS_SPREADSHEET_ID: '1Z9LMHgyGm3VEI3TojUxfUg6c01MI5CMLmUmnSUl-nCw'
+          GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}

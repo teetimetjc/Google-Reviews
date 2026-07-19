@@ -1,7 +1,13 @@
 name: Manual Review Scan (Places API)
 
 on:
+  # Paused: Places API only returns Google's "most relevant" top 5 reviews,
+  # not guaranteed to be the newest — not good enough as a standing cron
+  # until we find a better data source. See README "Manual scan" section.
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   scan-reviews:
@@ -20,6 +26,9 @@ jobs:
           PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
           PLACE_ID: ${{ secrets.PLACE_ID }}
           BUSINESS_NAME: SOS Septic
+          # Currently: false = notify on every new review, any rating.
+          # Set to 'true' to go back to only flagging reviews under 5 stars.
+          ONLY_FLAG_BELOW_5: 'false'
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
@@ -28,3 +37,11 @@ jobs:
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: node src/places-check.js
+
+      - name: Commit updated review state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state/
+          git diff --cached --quiet || git commit -m "Update Places review tracking state [skip ci]"
+          git push

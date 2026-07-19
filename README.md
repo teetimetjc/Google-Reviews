@@ -1,8 +1,8 @@
 # Google Reviews Automation
 
-Pulls reviews from a company's Google Business Profile, flags every review that
-isn't 5 stars and hasn't been replied to yet, and emails a digest so the
-company knows what needs a response.
+Pulls reviews from a company's Google Business Profile and emails a digest
+whenever a new one shows up, so the company knows what's been posted and can
+respond quickly.
 
 ## How it works
 
@@ -17,6 +17,11 @@ company knows what needs a response.
   (committed back to the repo by the workflow) so a review stays in every
   digest until it's answered, and the email can show how long it's been
   waiting.
+
+There's also a secondary **Places API scan** (`src/places-check.js`, see
+"Manual scan" below) that was built as a stopgap while the Business Profile
+Reviews API was inaccessible. It's currently paused now that the real
+digest above is working, but it's still there as a fallback.
 
 ## One-time setup
 
@@ -96,21 +101,34 @@ Settings → Secrets and variables → Actions:
 | `SMTP_PASS` | SMTP password / app password |
 | `EMAIL_FROM` | From address |
 | `EMAIL_TO` | Who gets the digest (comma-separated for multiple recipients) |
+| `GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY` | Full JSON key for the Sheets-logging service account (optional) |
+| `ANTHROPIC_API_KEY` | For AI-drafted review replies (optional, see below) |
+| `PUSHOVER_TOKEN` / `PUSHOVER_USER` | For a push notification when new drafts are ready (optional) |
 
 ### 8. Done
 
 The **Google Reviews Check** workflow
-(`.github/workflows/review-check.yml`) runs daily at 13:00 UTC and can also
-be triggered manually from the Actions tab — use that to test it end to end
+(`.github/workflows/review-check.yml`) runs hourly and can also be
+triggered manually from the Actions tab — use that to test it end to end
 before waiting for the schedule.
 
-## Manual scan (no Business Profile API approval needed)
+## Manual scan (fallback — currently paused)
 
-While waiting for (or instead of) Business Profile API access, the **Manual
-Review Scan (Places API)** workflow scans the listing on demand and emails
-the results — flagged reviews or an "all clear."
+`src/places-check.js` / the **Manual Review Scan (Places API)** workflow
+was built as a stopgap for when `mybusiness.googleapis.com` (the legacy
+Reviews API `src/index.js` depends on) couldn't be enabled for this
+project. That access issue turned out to be transient — enabling the API
+via `gcloud services enable mybusiness.googleapis.com` eventually
+succeeded after a retry — so the main digest is the working solution now,
+and this fallback is paused (no `schedule:` trigger in
+`.github/workflows/manual-review-scan.yml`).
 
-Setup:
+Its limitations, if it's ever needed again: the Places API only returns
+**up to 5 reviews**, chosen by Google's own "relevance" ranking — **not
+necessarily the most recent ones**, with no documented way to change that.
+It also doesn't expose whether the owner has replied.
+
+Setup, if re-enabling it:
 
 1. In Google Cloud Console, enable the **Places API (New)** and create an
    **API key** (APIs & Services → Credentials → Create credentials → API
@@ -121,14 +139,56 @@ Setup:
    (search for the business by name).
 3. Add two more repo secrets: `PLACES_API_KEY` and `PLACE_ID` (SMTP/email
    secrets are shared with the main workflow).
-4. Trigger it any time from the **Actions** tab → *Manual Review Scan
-   (Places API)* → **Run workflow** (works from the GitHub mobile app too).
+4. Add a `schedule:` trigger back to `.github/workflows/manual-review-scan.yml`,
+   or trigger it manually from the **Actions** tab → *Manual Review Scan
+   (Places API)* → **Run workflow**.
 
-Limitations: the Places API only returns the **5 most recent reviews** and
-doesn't expose whether the owner has replied — so this is a "what's new"
-check, not full outstanding-review tracking. The scheduled digest
-(`src/index.js`) remains the complete solution once GBP API access is
-approved.
+`state/places-notified.json` tracks which reviews have already been
+emailed about, so re-running only sends an email when a *new* review shows
+up (or nothing at all, if `ALWAYS_SEND` isn't set to `true`). By default it
+notifies on a new review of **any** rating; set the `ONLY_FLAG_BELOW_5` env
+var to `'true'` in the workflow to go back to only flagging reviews under
+5 stars.
+
+## Google Sheets logging
+
+If `SHEETS_SPREADSHEET_ID` and `GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY` are set,
+every run of `src/index.js` also syncs to a Google Sheet using a **service
+account** (no OAuth expiry to worry about):
+
+- **Reviews Log** — one row per review, upserted in place (matched by the
+  Review ID in the last column) and kept sorted newest-first. This is
+  current state, not history — a reply or edit updates the existing row.
+- **Change Log** — append-only audit trail: every detected new review,
+  reply, or edit gets its own row and is never overwritten.
+
+Set up a Google Cloud service account with Sheets API access, share the
+target Sheet with its `client_email` as an Editor, and put the full JSON key
+in the `GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY` secret.
+
+## AI-drafted review replies
+
+`scripts/generate-draft-responses.js` (**Generate Draft Review Replies**
+workflow, runs 15 minutes after each hourly review check) reads the
+**Reviews Log** tab and, for every row still in `Response Status: pending`:
+
+- If the review already has a real reply, it's marked `posted` — no draft
+  needed.
+- Otherwise it calls the Claude API with the reviewer's name, star rating,
+  review text, and date, and writes a suggested reply into
+  `Draft Response`, setting `Response Status` to `drafted`.
+
+**Nothing is ever posted automatically.** Drafts are for a human to review
+and copy/paste into Google Business Profile — this is an interim step ahead
+of full auto-reply once the separate Business Profile auto-reply API access
+request is approved.
+
+Requires an `ANTHROPIC_API_KEY` repo secret. `MAX_DRAFTS_PER_RUN` (default
+25) caps how many Claude calls happen in a single run — mainly relevant the
+first time this runs against a sheet with years of backfilled reviews;
+anything past the cap is picked up on the next run. Optional
+`PUSHOVER_TOKEN`/`PUSHOVER_USER` secrets send a push notification whenever
+new drafts are ready.
 
 ## Running locally
 
@@ -143,7 +203,12 @@ npm start
 
 - Uses the legacy `mybusiness.googleapis.com/v4` Reviews endpoint, which is
   still required for reading/replying to reviews even though most other
-  Business Profile resources have moved to newer APIs.
+  Business Profile resources have moved to newer APIs. If this API ever
+  shows `403 SERVICE_DISABLED` for a project, try enabling it via
+  `gcloud services enable mybusiness.googleapis.com --project=<id>` in
+  Cloud Shell — the Console's "Enable" page has been unreliable for this
+  particular API, and the gcloud command may report a transient-looking
+  "Regional Access Boundary" error before eventually succeeding; retry it.
 - No email is sent when there's nothing to flag, unless `ALWAYS_SEND=true`.
 - A flagged review stays in the digest every day until it gets a reply or
   its rating becomes 5★ — so missing a day's email won't cause anything to
