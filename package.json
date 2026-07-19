@@ -11,6 +11,7 @@
     "start": "node src/index.js",
     "scan": "node src/places-check.js",
     "test-email": "node scripts/test-email.js",
+    "cleanup-sheet": "node scripts/cleanup-duplicate-review-rows.js",
     "get-refresh-token": "node scripts/get-refresh-token.js",
     "list-locations": "node scripts/list-accounts-locations.js"
   },

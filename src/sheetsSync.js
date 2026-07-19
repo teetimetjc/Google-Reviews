@@ -33,7 +33,7 @@ function base64url(input) {
     .replace(/=+$/, '');
 }
 
-async function getAccessToken(serviceAccountKeyJson) {
+export async function getAccessToken(serviceAccountKeyJson) {
   const { client_email, private_key } = JSON.parse(serviceAccountKeyJson);
   const now = Math.floor(Date.now() / 1000);
   const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
