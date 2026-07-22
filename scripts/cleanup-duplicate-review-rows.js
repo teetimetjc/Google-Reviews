@@ -1,7 +1,7 @@
-// One-off cleanup: removes stale "Reviews Log" rows left behind by the
-// column-migration bug (rows written before the sheet expanded from 8 to
-// 13 columns; their Review ID ended up misaligned into a different
-// column, and the Review ID column itself was left blank on those rows).
+// One-off cleanup: removes stale "Reviews Log" rows left behind by a
+// column-migration bug (rows written under an older, narrower schema;
+// their Review ID ended up misaligned into a different column, and the
+// Review ID column itself was left blank on those rows).
 // Every real review has exactly one blank-ID row and one correct row, so
 // this just drops any row with a blank Review ID and leaves the rest
 // untouched. Safe to run more than once — it's a no-op once clean.
@@ -34,7 +34,7 @@ async function sheetsRequest(accessToken, pathAndQuery, options = {}) {
 
 const accessToken = await getAccessToken(GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY);
 
-const range = encodeURIComponent(`${TAB}!A1:M100000`);
+const range = encodeURIComponent(`${TAB}!A1:Z100000`);
 const { values = [] } = await sheetsRequest(accessToken, `${SHEETS_SPREADSHEET_ID}/values/${range}`);
 
 if (values.length === 0) {
@@ -54,7 +54,7 @@ if (staleCount === 0) {
   process.exit(0);
 }
 
-const clearRange = encodeURIComponent(`${TAB}!A2:M100000`);
+const clearRange = encodeURIComponent(`${TAB}!A2:Z100000`);
 await sheetsRequest(accessToken, `${SHEETS_SPREADSHEET_ID}/values/${clearRange}:clear`, {
   method: 'POST',
   body: JSON.stringify({}),
