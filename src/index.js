@@ -64,7 +64,14 @@ function statusFor(stars, hasReply) {
 }
 
 // [Date, Rating, Review, Reviewer, Anonymous?, Reviewer Photo, Edited?,
-//  Last Updated, Replied?, Reply Text, Reply Date, Status, Review ID]
+//  Last Updated, Replied?, Reply Text, Reply Date, Status, Response Status,
+//  Draft Response, Review ID]
+//
+// Response Status / Draft Response are only ever written here for BRAND NEW
+// rows (see sheetsSync.js — updates to existing rows never touch these two
+// columns, so a human-reviewed draft is never clobbered by the next hourly
+// sync). A review that already has a reply when we first see it doesn't
+// need an AI draft, so it starts as "posted" instead of "pending".
 function sheetRowFor(review, stars) {
   const hasReply = Boolean(review.reviewReply);
   const edited = review.updateTime && review.createTime && review.updateTime !== review.createTime;
@@ -81,6 +88,8 @@ function sheetRowFor(review, stars) {
     review.reviewReply?.comment || '',
     review.reviewReply?.updateTime || '',
     statusFor(stars, hasReply),
+    hasReply ? 'posted' : 'pending',
+    '',
     review.name,
   ];
 }

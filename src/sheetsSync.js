@@ -18,9 +18,17 @@ const REVIEWS_TAB = 'Reviews Log';
 const REVIEWS_HEADERS = [
   'Date', 'Rating', 'Review', 'Reviewer', 'Anonymous?', 'Reviewer Photo',
   'Edited?', 'Last Updated', 'Replied?', 'Reply Text', 'Reply Date',
-  'Status', 'Review ID',
+  'Status', 'Response Status', 'Draft Response', 'Review ID',
 ];
-const REVIEWS_LAST_COL = String.fromCharCode(64 + REVIEWS_HEADERS.length); // 'M'
+const REVIEWS_LAST_COL = String.fromCharCode(64 + REVIEWS_HEADERS.length); // 'O'
+// Columns through "Status" are owned by the review-check sync (src/index.js)
+// and rewritten on every run. "Response Status"/"Draft Response" are owned
+// by the draft-generation script (scripts/generate-draft-responses.js) —
+// the review-check sync must never touch them, or it would stomp a drafted
+// reply back to blank on the next hourly run. Review ID is never rewritten;
+// it's only ever used to find the row.
+const REVIEWS_CORE_HEADERS = ['Date', 'Rating', 'Review', 'Reviewer', 'Anonymous?', 'Reviewer Photo', 'Edited?', 'Last Updated', 'Replied?', 'Reply Text', 'Reply Date', 'Status'];
+const REVIEWS_CORE_LAST_COL = String.fromCharCode(64 + REVIEWS_CORE_HEADERS.length); // 'L'
 
 const CHANGE_LOG_TAB = 'Change Log';
 const CHANGE_LOG_HEADERS = ['Detected At', 'Location', 'Change Type', 'Reviewer', 'Rating', 'Comment'];
@@ -126,7 +134,7 @@ async function sortNewestFirst(accessToken, spreadsheetId, sheetId, columnCount,
 
 // `rows` items (matches REVIEWS_HEADERS order, Review ID always last):
 //   [date, rating, review, reviewer, anonymous, photoUrl, edited, lastUpdated,
-//    repliedYesNo, replyText, replyDate, status, reviewId]
+//    repliedYesNo, replyText, replyDate, status, responseStatus, draftResponse, reviewId]
 // `changes` items: [detectedAt, location, changeType, reviewer, rating, comment]
 export async function syncReviewsToSheet({ spreadsheetId, serviceAccountKeyJson, rows, changes }) {
   const accessToken = await getAccessToken(serviceAccountKeyJson);
@@ -143,7 +151,11 @@ export async function syncReviewsToSheet({ spreadsheetId, serviceAccountKeyJson,
     const reviewId = row[row.length - 1];
     const rowNumber = idToRow.get(reviewId);
     if (rowNumber) {
-      updates.push({ range: `${REVIEWS_TAB}!A${rowNumber}:${REVIEWS_LAST_COL}${rowNumber}`, values: [row] });
+      // Existing row: only rewrite the core columns (Date..Status), never
+      // the Response Status / Draft Response columns — those are owned by
+      // the draft-generation script.
+      const coreValues = row.slice(0, REVIEWS_CORE_HEADERS.length);
+      updates.push({ range: `${REVIEWS_TAB}!A${rowNumber}:${REVIEWS_CORE_LAST_COL}${rowNumber}`, values: [coreValues] });
     } else {
       newRows.push(row);
     }

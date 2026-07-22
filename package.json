@@ -13,9 +13,11 @@
     "test-email": "node scripts/test-email.js",
     "cleanup-sheet": "node scripts/cleanup-duplicate-review-rows.js",
     "get-refresh-token": "node scripts/get-refresh-token.js",
-    "list-locations": "node scripts/list-accounts-locations.js"
+    "list-locations": "node scripts/list-accounts-locations.js",
+    "draft-responses": "node scripts/generate-draft-responses.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.3",
     "nodemailer": "^9.0.1"
   }
 }

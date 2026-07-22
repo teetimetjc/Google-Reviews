@@ -1,0 +1,29 @@
+name: Generate Draft Review Replies
+
+on:
+  schedule:
+    # 15 minutes after the hourly review check, so newly-logged rows exist
+    - cron: '15 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  draft-responses:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Generate draft replies for pending reviews
+        env:
+          SHEETS_SPREADSHEET_ID: '1Z9LMHgyGm3VEI3TojUxfUg6c01MI5CMLmUmnSUl-nCw'
+          GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BUSINESS_NAME: SOS Septic
+          PUSHOVER_TOKEN: ${{ secrets.PUSHOVER_TOKEN }}
+          PUSHOVER_USER: ${{ secrets.PUSHOVER_USER }}
+        run: npm run draft-responses
