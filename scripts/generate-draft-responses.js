@@ -10,6 +10,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getAccessToken } from '../src/sheetsSync.js';
+import { createTransport } from '../src/email.js';
 
 const {
   SHEETS_SPREADSHEET_ID,
@@ -20,16 +21,9 @@ const {
   MAX_DRAFTS_PER_RUN,
   PUSHOVER_TOKEN,
   PUSHOVER_USER,
+  EMAIL_FROM,
+  EMAIL_TO,
 } = process.env;
-
-if (!SHEETS_SPREADSHEET_ID || !GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY) {
-  console.error('Set SHEETS_SPREADSHEET_ID and GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY env vars first.');
-  process.exit(1);
-}
-if (!ANTHROPIC_API_KEY) {
-  console.error('Set ANTHROPIC_API_KEY env var first.');
-  process.exit(1);
-}
 
 const TAB = 'Reviews Log';
 const businessName = BUSINESS_NAME || 'S.O.S. Septic';
@@ -129,87 +123,139 @@ async function notifyPushover(count) {
   });
 }
 
-const accessToken = await getAccessToken(GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY);
-const range = encodeURIComponent(`${TAB}!A1:Z100000`);
-const { values = [] } = await sheetsRequest(accessToken, `${SHEETS_SPREADSHEET_ID}/values/${range}`);
-
-if (values.length < 2) {
-  console.log('No review rows found, nothing to do.');
-  process.exit(0);
-}
-
-const [header, ...rows] = values;
-const col = {
-  date: header.indexOf('Date'),
-  rating: header.indexOf('Rating'),
-  review: header.indexOf('Review'),
-  reviewer: header.indexOf('Reviewer'),
-  replied: header.indexOf('Replied?'),
-  responseStatus: header.indexOf('Response Status'),
-  draftResponse: header.indexOf('Draft Response'),
-};
-for (const [name, index] of Object.entries(col)) {
-  if (index === -1) {
-    console.error(`Column "${name}" not found in header row — run the review-check workflow first so the sheet schema is up to date.`);
-    process.exit(1);
-  }
-}
-
-const responseStatusCol = columnLetter(col.responseStatus);
-const draftResponseCol = columnLetter(col.draftResponse);
-
-const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-
-let drafted = 0;
-let markedPosted = 0;
-let skippedCap = 0;
-const updates = [];
-
-for (let i = 0; i < rows.length; i++) {
-  const row = rows[i];
-  const status = (row[col.responseStatus] ?? '').toString().trim().toLowerCase();
-  if (status && status !== 'pending') continue;
-
-  const rowNumber = i + 2;
-  const alreadyReplied = (row[col.replied] ?? '').toString().trim() === 'Yes';
-
-  if (alreadyReplied) {
-    updates.push({
-      range: `${TAB}!${responseStatusCol}${rowNumber}`,
-      values: [['posted']],
+// Best-effort email alert on failure (credits ran out, bad key, Sheets
+// error, etc). Reuses the SMTP setup already configured for the review
+// digest, so no new notification service is required.
+async function notifyFailure(error) {
+  console.error(error);
+  if (!EMAIL_TO) return;
+  try {
+    const transport = createTransport(process.env);
+    await transport.sendMail({
+      from: EMAIL_FROM || EMAIL_TO,
+      to: EMAIL_TO,
+      subject: 'Google Reviews: AI draft-reply run failed',
+      text: [
+        'The "Generate Draft Review Replies" workflow failed to complete:',
+        '',
+        error.message || String(error),
+        '',
+        'Common cause: Anthropic API credits ran out — check console.anthropic.com/settings/billing.',
+        'Full logs: the Actions tab on the Google-Reviews GitHub repo.',
+      ].join('\n'),
     });
-    markedPosted++;
-    continue;
+  } catch (emailErr) {
+    console.error('Also failed to send the failure notification email:', emailErr.message);
+  }
+}
+
+async function run() {
+  if (!SHEETS_SPREADSHEET_ID || !GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY) {
+    throw new Error('Set SHEETS_SPREADSHEET_ID and GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY env vars first.');
+  }
+  if (!ANTHROPIC_API_KEY) {
+    throw new Error('Set ANTHROPIC_API_KEY env var first.');
   }
 
-  if (drafted >= maxDrafts) {
-    skippedCap++;
-    continue;
+  const accessToken = await getAccessToken(GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY);
+  const range = encodeURIComponent(`${TAB}!A1:Z100000`);
+  const { values = [] } = await sheetsRequest(accessToken, `${SHEETS_SPREADSHEET_ID}/values/${range}`);
+
+  if (values.length < 2) {
+    console.log('No review rows found, nothing to do.');
+    return;
   }
 
-  const draft = await draftReply(client, {
-    reviewer: row[col.reviewer],
-    rating: row[col.rating],
-    comment: row[col.review],
-    date: row[col.date],
-  });
+  const [header, ...rows] = values;
+  const col = {
+    date: header.indexOf('Date'),
+    rating: header.indexOf('Rating'),
+    review: header.indexOf('Review'),
+    reviewer: header.indexOf('Reviewer'),
+    replied: header.indexOf('Replied?'),
+    responseStatus: header.indexOf('Response Status'),
+    draftResponse: header.indexOf('Draft Response'),
+  };
+  for (const [name, index] of Object.entries(col)) {
+    if (index === -1) {
+      throw new Error(`Column "${name}" not found in header row — run the review-check workflow first so the sheet schema is up to date.`);
+    }
+  }
 
-  updates.push({
-    range: `${TAB}!${responseStatusCol}${rowNumber}:${draftResponseCol}${rowNumber}`,
-    values: [['drafted', draft]],
-  });
-  drafted++;
+  const responseStatusCol = columnLetter(col.responseStatus);
+  const draftResponseCol = columnLetter(col.draftResponse);
+
+  const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+  let drafted = 0;
+  let markedPosted = 0;
+  let skippedCap = 0;
+  const updates = [];
+  let draftingError = null;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const status = (row[col.responseStatus] ?? '').toString().trim().toLowerCase();
+    if (status && status !== 'pending') continue;
+
+    const rowNumber = i + 2;
+    const alreadyReplied = (row[col.replied] ?? '').toString().trim() === 'Yes';
+
+    if (alreadyReplied) {
+      updates.push({
+        range: `${TAB}!${responseStatusCol}${rowNumber}`,
+        values: [['posted']],
+      });
+      markedPosted++;
+      continue;
+    }
+
+    if (drafted >= maxDrafts) {
+      skippedCap++;
+      continue;
+    }
+
+    try {
+      const draft = await draftReply(client, {
+        reviewer: row[col.reviewer],
+        rating: row[col.rating],
+        comment: row[col.review],
+        date: row[col.date],
+      });
+
+      updates.push({
+        range: `${TAB}!${responseStatusCol}${rowNumber}:${draftResponseCol}${rowNumber}`,
+        values: [['drafted', draft]],
+      });
+      drafted++;
+    } catch (err) {
+      // Stop drafting (further calls will likely fail the same way — out
+      // of credits, bad key, etc) but keep whatever was already drafted
+      // this run so it isn't lost.
+      draftingError = err;
+      break;
+    }
+  }
+
+  if (updates.length) {
+    await sheetsRequest(accessToken, `${SHEETS_SPREADSHEET_ID}/values:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({ valueInputOption: 'RAW', data: updates }),
+    });
+  }
+
+  console.log(`Drafted ${drafted} new repl${drafted === 1 ? 'y' : 'ies'}, marked ${markedPosted} already-replied row(s) as posted${skippedCap ? `, ${skippedCap} more left pending for next run (hit the ${maxDrafts}-per-run cap)` : ''}.`);
+
+  if (drafted > 0) {
+    await notifyPushover(drafted);
+  }
+
+  if (draftingError) {
+    throw draftingError;
+  }
 }
 
-if (updates.length) {
-  await sheetsRequest(accessToken, `${SHEETS_SPREADSHEET_ID}/values:batchUpdate`, {
-    method: 'POST',
-    body: JSON.stringify({ valueInputOption: 'RAW', data: updates }),
-  });
-}
-
-console.log(`Drafted ${drafted} new repl${drafted === 1 ? 'y' : 'ies'}, marked ${markedPosted} already-replied row(s) as posted${skippedCap ? `, ${skippedCap} more left pending for next run (hit the ${maxDrafts}-per-run cap)` : ''}.`);
-
-if (drafted > 0) {
-  await notifyPushover(drafted);
-}
+run().catch(async (err) => {
+  await notifyFailure(err);
+  process.exitCode = 1;
+});
