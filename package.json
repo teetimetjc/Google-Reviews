@@ -14,7 +14,8 @@
     "cleanup-sheet": "node scripts/cleanup-duplicate-review-rows.js",
     "get-refresh-token": "node scripts/get-refresh-token.js",
     "list-locations": "node scripts/list-accounts-locations.js",
-    "draft-responses": "node scripts/generate-draft-responses.js"
+    "draft-responses": "node scripts/generate-draft-responses.js",
+    "add-summary-metrics": "node scripts/add-summary-metrics.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",
