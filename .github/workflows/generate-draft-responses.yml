@@ -24,6 +24,10 @@ jobs:
           GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BUSINESS_NAME: SOS Septic
+          # Only reviews posted on/after this date get an AI draft — the
+          # historical backlog before this date is left alone (no API
+          # calls, stays "pending" forever) so it doesn't keep costing money.
+          DRAFT_CUTOFF: '2026-07-23T00:00:00Z'
           PUSHOVER_TOKEN: ${{ secrets.PUSHOVER_TOKEN }}
           PUSHOVER_USER: ${{ secrets.PUSHOVER_USER }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
