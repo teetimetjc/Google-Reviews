@@ -5,6 +5,11 @@
 //   - calls Claude to write a suggested reply, writes it into "Draft
 //     Response", and sets Response Status to "drafted".
 //
+// Reviews posted before DRAFT_CUTOFF are left alone entirely (no API call,
+// stays "pending") — this is what keeps a large historical backlog from
+// costing money on every run; only reviews from the cutoff forward get
+// drafted.
+//
 // Human stays in the loop: drafts are for manual copy/paste into Google
 // Business Profile, never auto-posted. This never touches any other column.
 
@@ -19,6 +24,7 @@ const {
   BUSINESS_NAME,
   BUSINESS_PHONE,
   MAX_DRAFTS_PER_RUN,
+  DRAFT_CUTOFF,
   PUSHOVER_TOKEN,
   PUSHOVER_USER,
   EMAIL_FROM,
@@ -28,10 +34,13 @@ const {
 const TAB = 'Reviews Log';
 const businessName = BUSINESS_NAME || 'S.O.S. Septic';
 const businessPhone = BUSINESS_PHONE || '941-473-1767';
-// Caps API calls on any single run (mainly matters the first time this runs
-// against a sheet with years of backfilled reviews) — the rest get picked
-// up on the next scheduled run. Raise via env var if a bigger batch is fine.
+// Caps API calls on any single run — mostly a safety net now that
+// DRAFT_CUTOFF keeps the historical backlog out of scope.
 const maxDrafts = Number(MAX_DRAFTS_PER_RUN) || 25;
+// Only reviews posted on/after this date get drafted. Reviews older than
+// this are skipped with no API call and stay "pending" indefinitely — set
+// this to "now" whenever you want to draw a line under the backlog.
+const draftCutoff = DRAFT_CUTOFF ? new Date(DRAFT_CUTOFF) : null;
 
 // Modeled on real replies the office has written (narrative, specific,
 // technicians credited by name) rather than a generic template.
@@ -190,6 +199,7 @@ async function run() {
   let drafted = 0;
   let markedPosted = 0;
   let skippedCap = 0;
+  let skippedOld = 0;
   const updates = [];
   let draftingError = null;
 
@@ -208,6 +218,14 @@ async function run() {
       });
       markedPosted++;
       continue;
+    }
+
+    if (draftCutoff) {
+      const reviewDate = row[col.date] ? new Date(row[col.date]) : null;
+      if (!reviewDate || reviewDate < draftCutoff) {
+        skippedOld++;
+        continue;
+      }
     }
 
     if (drafted >= maxDrafts) {
@@ -244,7 +262,7 @@ async function run() {
     });
   }
 
-  console.log(`Drafted ${drafted} new repl${drafted === 1 ? 'y' : 'ies'}, marked ${markedPosted} already-replied row(s) as posted${skippedCap ? `, ${skippedCap} more left pending for next run (hit the ${maxDrafts}-per-run cap)` : ''}.`);
+  console.log(`Drafted ${drafted} new repl${drafted === 1 ? 'y' : 'ies'}, marked ${markedPosted} already-replied row(s) as posted${skippedOld ? `, skipped ${skippedOld} pre-cutoff review(s)` : ''}${skippedCap ? `, ${skippedCap} more left pending for next run (hit the ${maxDrafts}-per-run cap)` : ''}.`);
 
   if (drafted > 0) {
     await notifyPushover(drafted);
