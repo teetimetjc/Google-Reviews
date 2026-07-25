@@ -190,6 +190,45 @@ anything past the cap is picked up on the next run. Optional
 `PUSHOVER_TOKEN`/`PUSHOVER_USER` secrets send a push notification whenever
 new drafts are ready.
 
+## Competitor GBP tracking
+
+`scripts/competitor-gbp-tracker.js` (**Competitor GBP Tracker** workflow,
+runs weekly) tracks a hand-picked list of competitors' *public* Google
+Business Profile listings — rating, review count, and how that's changed
+since last week — in two new tabs on the same spreadsheet. It never reads
+or writes the Reviews Log/Change Log tabs, and it's a completely separate
+script from the one above.
+
+The Business Profile Reviews API can only read locations *you* manage, so
+competitor data comes from the **Places API (New)** instead (the same one
+`src/places-check.js` already uses) — public listing data anyone can look
+up, not the private review-management API.
+
+- **Competitors** — hand-maintained by you: `Competitor Name`, `GBP Place
+  ID (or CID)`, `Website URL`, `Service Area`, `Notes`. The script creates
+  this tab with two placeholder rows the first time it runs, then never
+  touches it again. Fill in a real Place ID to have a row tracked; rows
+  with a blank Place ID (like the placeholders) are skipped. Find a
+  competitor's Place ID with the same
+  [Place ID Finder](https://developers.google.com/maps/documentation/javascript/examples/places-placeid-finder)
+  used for the manual scan above.
+- **Competitor_GBP_Snapshots** — one row appended per competitor per run:
+  snapshot date, star rating, total review count, the change in review
+  count since that competitor's last snapshot, photos count, and
+  categories/services listed (all as currently exposed by the Places API).
+  Append-only — past snapshots are never edited, so this becomes a
+  week-over-week history per competitor.
+
+Requires a `PLACES_API_KEY` repo secret (same key as the manual-scan
+fallback above, if you already enabled the Places API (New) for that — one
+key covers both). Failed lookups for one competitor (bad Place ID, rate
+limit, etc.) are logged and skipped without stopping the rest of the run.
+
+Individual competitor review text/snippets (a possible phase 2) isn't
+built yet — the Places API only exposes up to 5 reviews per listing by
+Google's own relevance ranking, so a richer source (e.g. SerpApi) would be
+worth revisiting only if that level of detail becomes useful later.
+
 ## Running locally
 
 ```
