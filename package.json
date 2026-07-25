@@ -16,7 +16,8 @@
     "list-locations": "node scripts/list-accounts-locations.js",
     "draft-responses": "node scripts/generate-draft-responses.js",
     "add-summary-metrics": "node scripts/add-summary-metrics.js",
-    "competitor-tracker": "node scripts/competitor-gbp-tracker.js"
+    "competitor-tracker": "node scripts/competitor-gbp-tracker.js",
+    "seed-competitors": "node scripts/seed-competitors.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",
