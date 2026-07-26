@@ -1,9 +1,10 @@
 name: Competitor Yelp Tracker
 
+# Paused: Yelp discontinued the free Fusion API tier (now paid,
+# ~$8-15 per 1,000 calls after a 30-day trial). No `schedule:` trigger for
+# now so this doesn't fail weekly for a plan we're not paying for — still
+# runnable manually from the Actions tab if that ever changes.
 on:
-  schedule:
-    # Weekly, 15 minutes after the Google competitor tracker
-    - cron: '15 13 * * 1'
   workflow_dispatch: {}
 
 jobs:
