@@ -1,0 +1,26 @@
+name: Competitor Yelp Tracker
+
+on:
+  schedule:
+    # Weekly, 15 minutes after the Google competitor tracker
+    - cron: '15 13 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  competitor-yelp-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Snapshot competitor Yelp listings
+        env:
+          SHEETS_SPREADSHEET_ID: '1Z9LMHgyGm3VEI3TojUxfUg6c01MI5CMLmUmnSUl-nCw'
+          GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY }}
+          YELP_API_KEY: ${{ secrets.YELP_API_KEY }}
+        run: npm run competitor-yelp-tracker
