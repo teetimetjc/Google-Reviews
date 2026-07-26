@@ -229,7 +229,7 @@ built yet — the Places API only exposes up to 5 reviews per listing by
 Google's own relevance ranking, so a richer source (e.g. SerpApi) would be
 worth revisiting only if that level of detail becomes useful later.
 
-## Competitor Yelp tracking (built, paused — Yelp is no longer free)
+## Competitor Yelp tracking (built, paused — not free)
 
 `scripts/competitor-yelp-tracker.js` (**Competitor Yelp Tracker** workflow)
 does the same thing as the GBP tracker above, but for Yelp — same
@@ -251,15 +251,18 @@ Yelp business ID, star rating, review count, the change in review count
 since that competitor's last Yelp snapshot, categories, and the Yelp
 listing URL. Append-only, same as the GBP snapshots tab.
 
-**Currently paused, on purpose:** Yelp discontinued its free Fusion API
-tier. What's left is a 30-day free trial (5,000 calls), after which it's a
-paid plan (roughly $8-15 per 1,000 calls). That's an ongoing cost, not a
-one-time signup, so this isn't wired up to run automatically —
-`.github/workflows/competitor-yelp-tracker.yml` has no `schedule:` trigger,
-same pattern as the paused manual Places scan above. The code is fully
-built and works (needs a `YELP_API_KEY` repo secret to run manually from
-the Actions tab), so it's ready to switch on later if Yelp brings back a
-free tier or the cost becomes worth it.
+**Currently paused, on purpose:** Yelp discontinued its free Fusion API.
+The only thing actually free now is a 30-day trial (5,000 calls) — after
+that it's a **monthly subscription starting at $229/month** (Base plan,
+no review excerpts or photos; Enhanced is $299/mo, Premium is $643/mo)
+plus per-call overages on top. Not pay-as-you-go, not a one-time cost —
+a recurring bill regardless of how few competitors are tracked. So this
+isn't wired up to run automatically —
+`.github/workflows/competitor-yelp-tracker.yml` has no `schedule:`
+trigger, same pattern as the paused manual Places scan above. The code is
+fully built and works (needs a `YELP_API_KEY` repo secret to run manually
+from the Actions tab), so it's ready to switch on later if Yelp ever
+brings back a free tier or a subscription becomes worth it.
 
 Other review sites were considered and deliberately left out:
 
