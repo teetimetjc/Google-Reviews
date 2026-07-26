@@ -229,6 +229,45 @@ built yet — the Places API only exposes up to 5 reviews per listing by
 Google's own relevance ranking, so a richer source (e.g. SerpApi) would be
 worth revisiting only if that level of detail becomes useful later.
 
+## Competitor Yelp tracking
+
+`scripts/competitor-yelp-tracker.js` (**Competitor Yelp Tracker** workflow,
+runs weekly, 15 minutes after the Google competitor tracker) does the same
+thing as the GBP tracker above, but for Yelp — same **Competitors** tab as
+the source list, a separate **Competitor_Yelp_Snapshots** tab as the
+destination, and it never touches Reviews Log/Change Log or the GBP
+tracker's own tab.
+
+It appends exactly one new column to the existing **Competitors** tab —
+`Yelp Business ID (or Alias)` in column F — and never rewrites columns
+A–E. The first time it looks up a competitor with that column blank, it
+resolves a Yelp business automatically via Yelp's Business Search API
+(by name + service area) and writes the resolved ID back into that cell,
+so every run after that looks the business up directly instead of
+re-searching. If a search finds no match, that competitor is skipped and
+logged as a failure rather than guessed at.
+
+**Competitor_Yelp_Snapshots** columns: snapshot date, competitor name,
+Yelp business ID, star rating, review count, the change in review count
+since that competitor's last Yelp snapshot, categories, and the Yelp
+listing URL. Append-only, same as the GBP snapshots tab.
+
+Requires a `YELP_API_KEY` repo secret — a free Yelp Fusion API key (no
+paid tier needed), created at
+[fusion.yelp.com](https://fusion.yelp.com/) with a free Yelp developer
+account. The free tier's daily call limit is far more than this needs for
+a weekly run against a handful of competitors.
+
+Other review sites were considered and deliberately left out:
+
+- **Yahoo** doesn't have its own review platform anymore (Yahoo Local was
+  shut down years ago) — there's nothing to pull.
+- **BBB, Angi, Facebook Page reviews**, etc. don't offer a public,
+  ToS-compliant API for this kind of automated pull. Scraping them isn't
+  something this project does, regardless of how infrequently it would
+  run — checking those manually now and then is the honest option until
+  one of them offers a real API.
+
 ## Running locally
 
 ```
