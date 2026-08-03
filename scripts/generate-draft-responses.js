@@ -12,6 +12,15 @@
 //
 // Human stays in the loop: drafts are for manual copy/paste into Google
 // Business Profile, never auto-posted. This never touches any other column.
+//
+// Every new draft also gets a row in the separate "Approval Tracking" tab
+// (Approval Status: Draft), so a human can move it through
+// Draft -> Approved -> Sent/Skipped and see how long that takes. That tab
+// is deliberately separate from "Reviews Log" rather than new columns on
+// it — Reviews Log gets re-sorted newest-first on every hourly sync run,
+// and that sort only reorders columns A-O (its existing width), so any
+// data bolted onto new columns past O would stop following its row the
+// next time a sort runs and end up attached to the wrong review.
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getAccessToken } from '../src/sheetsSync.js';
@@ -32,6 +41,10 @@ const {
 } = process.env;
 
 const TAB = 'Reviews Log';
+const APPROVAL_TAB = 'Approval Tracking';
+const APPROVAL_HEADERS = ['Review ID', 'Date', 'Reviewer', 'Rating', 'Approval Status', 'Approval Status Updated'];
+const LAST_ROW = 100000;
+
 const businessName = BUSINESS_NAME || 'S.O.S. Septic';
 const businessPhone = BUSINESS_PHONE || '941-473-1767';
 // Caps API calls on any single run — mostly a safety net now that
@@ -96,6 +109,34 @@ async function sheetsRequest(accessToken, pathAndQuery, options = {}) {
 
 function columnLetter(index) {
   return String.fromCharCode(65 + index);
+}
+
+// Creates "Approval Tracking" with its header row only if it doesn't exist
+// yet. If it already exists, this never touches it again — it's an
+// append-only log the human can freely sort/filter/edit by hand.
+async function ensureApprovalTab(accessToken, spreadsheetId) {
+  const meta = await sheetsRequest(accessToken, `${spreadsheetId}?fields=sheets.properties(title,sheetId)`);
+  const exists = meta.sheets?.some((s) => s.properties.title === APPROVAL_TAB);
+  if (exists) return;
+
+  await sheetsRequest(accessToken, `${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: APPROVAL_TAB } } }] }),
+  });
+  const range = encodeURIComponent(`${APPROVAL_TAB}!A1`);
+  await sheetsRequest(accessToken, `${spreadsheetId}/values/${range}?valueInputOption=RAW`, {
+    method: 'PUT',
+    body: JSON.stringify({ values: [APPROVAL_HEADERS] }),
+  });
+  console.log(`Created "${APPROVAL_TAB}" tab.`);
+}
+
+// Review IDs that already have an Approval Tracking row, so a re-run never
+// appends a duplicate for the same review.
+async function fetchExistingApprovalIds(accessToken, spreadsheetId) {
+  const range = encodeURIComponent(`${APPROVAL_TAB}!A2:A${LAST_ROW}`);
+  const { values = [] } = await sheetsRequest(accessToken, `${spreadsheetId}/values/${range}`);
+  return new Set(values.map((row) => (row[0] ?? '').toString().trim()).filter(Boolean));
 }
 
 async function draftReply(client, { reviewer, rating, comment, date }) {
@@ -169,6 +210,10 @@ async function run() {
   }
 
   const accessToken = await getAccessToken(GOOGLE_SHEETS_SERVICE_ACCOUNT_KEY);
+
+  await ensureApprovalTab(accessToken, SHEETS_SPREADSHEET_ID);
+  const existingApprovalIds = await fetchExistingApprovalIds(accessToken, SHEETS_SPREADSHEET_ID);
+
   const range = encodeURIComponent(`${TAB}!A1:Z100000`);
   const { values = [] } = await sheetsRequest(accessToken, `${SHEETS_SPREADSHEET_ID}/values/${range}`);
 
@@ -186,6 +231,7 @@ async function run() {
     replied: header.indexOf('Replied?'),
     responseStatus: header.indexOf('Response Status'),
     draftResponse: header.indexOf('Draft Response'),
+    reviewId: header.indexOf('Review ID'),
   };
   for (const [name, index] of Object.entries(col)) {
     if (index === -1) {
@@ -203,6 +249,7 @@ async function run() {
   let skippedCap = 0;
   let skippedOld = 0;
   const updates = [];
+  const approvalRows = [];
   let draftingError = null;
 
   for (let i = 0; i < rows.length; i++) {
@@ -248,6 +295,12 @@ async function run() {
         values: [['drafted', draft]],
       });
       drafted++;
+
+      const reviewId = row[col.reviewId];
+      if (reviewId && !existingApprovalIds.has(reviewId)) {
+        approvalRows.push([reviewId, row[col.date] ?? '', row[col.reviewer] ?? '', row[col.rating] ?? '', 'Draft', new Date().toISOString()]);
+        existingApprovalIds.add(reviewId);
+      }
     } catch (err) {
       // Stop drafting (further calls will likely fail the same way — out
       // of credits, bad key, etc) but keep whatever was already drafted
@@ -264,7 +317,15 @@ async function run() {
     });
   }
 
-  console.log(`Drafted ${drafted} new repl${drafted === 1 ? 'y' : 'ies'}, marked ${markedPosted} already-replied row(s) as posted${skippedOld ? `, skipped ${skippedOld} pre-cutoff review(s)` : ''}${skippedCap ? `, ${skippedCap} more left pending for next run (hit the ${maxDrafts}-per-run cap)` : ''}.`);
+  if (approvalRows.length) {
+    const appendRange = encodeURIComponent(`${APPROVAL_TAB}!A1`);
+    await sheetsRequest(accessToken, `${SHEETS_SPREADSHEET_ID}/values/${appendRange}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+      method: 'POST',
+      body: JSON.stringify({ values: approvalRows }),
+    });
+  }
+
+  console.log(`Drafted ${drafted} new repl${drafted === 1 ? 'y' : 'ies'} (${approvalRows.length} added to Approval Tracking), marked ${markedPosted} already-replied row(s) as posted${skippedOld ? `, skipped ${skippedOld} pre-cutoff review(s)` : ''}${skippedCap ? `, ${skippedCap} more left pending for next run (hit the ${maxDrafts}-per-run cap)` : ''}.`);
 
   if (drafted > 0) {
     await notifyPushover(drafted);
