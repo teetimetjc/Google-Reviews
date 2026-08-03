@@ -190,6 +190,26 @@ anything past the cap is picked up on the next run. Optional
 `PUSHOVER_TOKEN`/`PUSHOVER_USER` secrets send a push notification whenever
 new drafts are ready.
 
+### Approval Tracking
+
+Every new draft also gets a row on a separate **Approval Tracking** tab:
+`Review ID, Date, Reviewer, Rating, Approval Status, Approval Status
+Updated`. New rows start with `Approval Status: Draft` and a timestamp;
+from there it's yours to hand-edit as a reply moves through
+`Draft -> Approved -> Sent` (or `Skipped`) — filter/sort by Approval
+Status like any normal sheet column, and the timestamp lets you see how
+long reviews sit before getting approved. Nothing here ever posts
+anything automatically; it's purely a tracking log.
+
+This is deliberately a separate tab rather than new columns on **Reviews
+Log** itself. `Reviews Log` gets re-sorted newest-first on every hourly
+review-check run, and that sort only reorders its existing columns (A
+through O) — any data added in new columns past O would stop following
+its row the next time a sort runs and end up attached to the wrong
+review. A separate tab keyed by Review ID avoids that entirely and never
+touches the review-check script, `Reviews Log`, or its conditional
+formatting.
+
 ## Competitor GBP tracking
 
 `scripts/competitor-gbp-tracker.js` (**Competitor GBP Tracker** workflow,
