@@ -21,6 +21,13 @@
 // and that sort only reorders columns A-O (its existing width), so any
 // data bolted onto new columns past O would stop following its row the
 // next time a sort runs and end up attached to the wrong review.
+//
+// Each generated draft also runs through a simple guardrail check (links,
+// promo/discount language, guarantees, profanity, ALL CAPS, competitor
+// names). A draft that fails is still written to "Draft Response" for a
+// human to see and fix, but its Approval Tracking row gets "Flagged"
+// instead of "Draft", so it surfaces for a closer look instead of looking
+// ready to copy/paste as-is.
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getAccessToken } from '../src/sheetsSync.js';
@@ -43,6 +50,7 @@ const {
 const TAB = 'Reviews Log';
 const APPROVAL_TAB = 'Approval Tracking';
 const APPROVAL_HEADERS = ['Review ID', 'Date', 'Reviewer', 'Rating', 'Approval Status', 'Approval Status Updated'];
+const COMPETITORS_TAB = 'Competitors';
 const LAST_ROW = 100000;
 
 const businessName = BUSINESS_NAME || 'S.O.S. Septic';
@@ -58,7 +66,7 @@ const draftCutoff = DRAFT_CUTOFF ? new Date(DRAFT_CUTOFF) : null;
 // Modeled on real replies the office has written (narrative, specific,
 // technicians credited by name) rather than a generic template.
 const SYSTEM_PROMPT = `
-You are writing a public reply, posted from ${businessName} (a family-owned septic tank service company), to a customer's Google review. Match the voice the office actually uses: warm, conversational, and specific. Never write a generic template that could apply to any business.
+You are writing a public reply, posted from ${businessName} (a family-owned septic tank service company), to a customer's Google review. Match the voice the office actually uses: friendly, professional, conversational, and specific, with no corporate jargon. Never write a generic template that could apply to any business.
 
 Two real examples of the house style, for calibration:
 
@@ -84,13 +92,44 @@ Rules:
 - Reference the specifics from the review: what was done, timing, pricing, or anything else mentioned. If the review names a technician, credit that technician by name in the reply. Never write something generic.
 - For 4-5 star reviews: thank them specifically for what they mentioned and the technician(s) named, and close with an invitation for future service or a thank-you for their trust/recommendation.
 - For 3 star reviews: thank them, acknowledge the specific concern they raised without being defensive, and briefly note it for next time.
-- For 1-2 star reviews (or any review describing a real problem): open acknowledging their frustration, then explain what actually happened using only details grounded in the review itself. Do not invent specifics (pricing, technician actions, cause) that aren't in the review text; if the review doesn't explain the issue in enough detail to address factually, give a brief genuine apology instead of guessing at facts. Stay factual and non-defensive, don't make excuses, and close by inviting them to call the office at ${businessPhone} to resolve it. Do not name a specific staff member to ask for. Do not promise a specific outcome (refund, redo, discount) — that isn't decided in a review reply.
+- For 1-2 star reviews (or any review describing a real problem): open acknowledging their frustration, then explain what actually happened using only details grounded in the review itself. Do not invent specifics (pricing, technician actions, cause) that aren't in the review text; if the review doesn't explain the issue in enough detail to address factually, give a brief genuine apology instead of guessing at facts. Stay factual and non-defensive, don't make excuses, and close by inviting them to call the office at ${businessPhone} to resolve it. Do not name a specific staff member to ask for.
+- Never mention any other septic, plumbing, or sanitation company by name, even to compare or contrast.
+- Never include a promo code, coupon, discount offer, "% off," or any link/URL.
+- Never guarantee an outcome (refund, redo, warranty) or make a specific claim about pricing beyond what's already stated in the review itself — pricing and resolution aren't decided in a review reply.
+- Never use profanity or write any word in ALL CAPS for emphasis.
 - Do not add a signature line (no "– The Team", no name) — end naturally on the closing sentence, like both examples above.
 - Never use emoji, even if the review itself uses them.
 - Never use an em dash or double hyphen (— or --). Use a period, comma, semicolon, or the word "and" instead.
 - Plain text only. No markdown, no subject line. This is the literal text that goes in the Google reply box.
 - Under 120 words.
 `.trim();
+
+// Backstop for the prompt rules above — a simple keyword/pattern pass over
+// each generated draft. Not exhaustive, just enough to catch an obvious
+// slip and route it to a human instead of marking it ready to copy/paste.
+const BANNED_PHRASES = ['guarantee', 'guaranteed', 'promo', 'coupon', 'discount code', '% off', 'percent off'];
+const PROFANITY = ['fuck', 'shit', 'damn', 'bitch', 'asshole'];
+
+function checkGuardrails(text, competitorNames) {
+  const reasons = [];
+  const lower = text.toLowerCase();
+
+  if (/https?:\/\/|www\.[a-z0-9]/i.test(text)) reasons.push('contains a link');
+
+  for (const phrase of BANNED_PHRASES) {
+    if (lower.includes(phrase)) reasons.push(`contains "${phrase}"`);
+  }
+  for (const word of PROFANITY) {
+    if (new RegExp(`\\b${word}\\b`, 'i').test(text)) reasons.push('contains profanity');
+  }
+  if (/\b[A-Z]{4,}\b/.test(text)) reasons.push('contains an ALL CAPS word');
+
+  for (const name of competitorNames) {
+    if (name && lower.includes(name.toLowerCase())) reasons.push(`mentions competitor "${name}"`);
+  }
+
+  return reasons;
+}
 
 async function sheetsRequest(accessToken, pathAndQuery, options = {}) {
   const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${pathAndQuery}`, {
@@ -137,6 +176,19 @@ async function fetchExistingApprovalIds(accessToken, spreadsheetId) {
   const range = encodeURIComponent(`${APPROVAL_TAB}!A2:A${LAST_ROW}`);
   const { values = [] } = await sheetsRequest(accessToken, `${spreadsheetId}/values/${range}`);
   return new Set(values.map((row) => (row[0] ?? '').toString().trim()).filter(Boolean));
+}
+
+// Best-effort: reuses the competitor list already maintained for
+// competitor-gbp-tracker.js so the guardrail check knows their names.
+// Missing tab or read error just means an empty list, not a failed run.
+async function fetchCompetitorNames(accessToken, spreadsheetId) {
+  try {
+    const range = encodeURIComponent(`${COMPETITORS_TAB}!A2:A${LAST_ROW}`);
+    const { values = [] } = await sheetsRequest(accessToken, `${spreadsheetId}/values/${range}`);
+    return values.map((row) => (row[0] ?? '').toString().trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
 }
 
 async function draftReply(client, { reviewer, rating, comment, date }) {
@@ -213,6 +265,7 @@ async function run() {
 
   await ensureApprovalTab(accessToken, SHEETS_SPREADSHEET_ID);
   const existingApprovalIds = await fetchExistingApprovalIds(accessToken, SHEETS_SPREADSHEET_ID);
+  const competitorNames = await fetchCompetitorNames(accessToken, SHEETS_SPREADSHEET_ID);
 
   const range = encodeURIComponent(`${TAB}!A1:Z100000`);
   const { values = [] } = await sheetsRequest(accessToken, `${SHEETS_SPREADSHEET_ID}/values/${range}`);
@@ -245,6 +298,7 @@ async function run() {
   const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
   let drafted = 0;
+  let flagged = 0;
   let markedPosted = 0;
   let skippedCap = 0;
   let skippedOld = 0;
@@ -298,7 +352,13 @@ async function run() {
 
       const reviewId = row[col.reviewId];
       if (reviewId && !existingApprovalIds.has(reviewId)) {
-        approvalRows.push([reviewId, row[col.date] ?? '', row[col.reviewer] ?? '', row[col.rating] ?? '', 'Draft', new Date().toISOString()]);
+        const flagReasons = checkGuardrails(draft, competitorNames);
+        const approvalStatus = flagReasons.length ? 'Flagged' : 'Draft';
+        if (flagReasons.length) {
+          flagged++;
+          console.warn(`Flagged draft for review ${reviewId}: ${flagReasons.join('; ')}`);
+        }
+        approvalRows.push([reviewId, row[col.date] ?? '', row[col.reviewer] ?? '', row[col.rating] ?? '', approvalStatus, new Date().toISOString()]);
         existingApprovalIds.add(reviewId);
       }
     } catch (err) {
@@ -325,7 +385,7 @@ async function run() {
     });
   }
 
-  console.log(`Drafted ${drafted} new repl${drafted === 1 ? 'y' : 'ies'} (${approvalRows.length} added to Approval Tracking), marked ${markedPosted} already-replied row(s) as posted${skippedOld ? `, skipped ${skippedOld} pre-cutoff review(s)` : ''}${skippedCap ? `, ${skippedCap} more left pending for next run (hit the ${maxDrafts}-per-run cap)` : ''}.`);
+  console.log(`Drafted ${drafted} new repl${drafted === 1 ? 'y' : 'ies'} (${approvalRows.length} added to Approval Tracking${flagged ? `, ${flagged} flagged for guardrail review` : ''}), marked ${markedPosted} already-replied row(s) as posted${skippedOld ? `, skipped ${skippedOld} pre-cutoff review(s)` : ''}${skippedCap ? `, ${skippedCap} more left pending for next run (hit the ${maxDrafts}-per-run cap)` : ''}.`);
 
   if (drafted > 0) {
     await notifyPushover(drafted);
