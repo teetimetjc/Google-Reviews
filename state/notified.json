@@ -1,8 +1,20 @@
 {
+  "accounts/106711451831008441902/locations/7456630582544079079/reviews/AbFvOqnxL40UZ4RdHrs3_KevLE2paTeuQuodxdSi0tT8yNmVQ4iGLqcuOrT52LJlyRY94XYbm5qNhA": {
+    "firstSeenAt": "2026-10-12T18:54:12.761Z",
+    "rating": "FIVE",
+    "hasReply": false,
+    "updateTime": "2026-10-12T17:12:18.414708Z"
+  },
+  "accounts/106711451831008441902/locations/7456630582544079079/reviews/AbFvOqkPuPo_-3pyHmikjsVxaYSCXCY4FG4Zq6qdfwr9Jr2RPBsg0xRASFXjuGjcMkzzh4ta8tCyqw": {
+    "firstSeenAt": "2026-10-12T18:54:12.762Z",
+    "rating": "THREE",
+    "hasReply": true,
+    "updateTime": "2026-10-12T12:20:40.506904Z"
+  },
   "accounts/106711451831008441902/locations/7456630582544079079/reviews/AbFvOqkVXyK7y-BSBFHGHIELzQ9U1iuP6cKbjH1o9TODjTP0NvpF4c5wREV01HJNT96kTRkAY_2t": {
     "firstSeenAt": "2026-10-12T08:57:08.136Z",
     "rating": "FIVE",
-    "hasReply": false,
+    "hasReply": true,
     "updateTime": "2026-10-11T23:24:13.005815Z"
   },
   "accounts/106711451831008441902/locations/7456630582544079079/reviews/AbFvOqnhsbX3pPUCEGqBrvQVZtaJkDmSq7qitm_BvN_RCLayhSLUvfieedwswYDkgcbWdeOM9bFDYw": {
