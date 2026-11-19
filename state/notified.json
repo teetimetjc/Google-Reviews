@@ -1,4 +1,10 @@
 {
+  "accounts/106711451831008441902/locations/7456630582544079079/reviews/AbFvOqlk5DmPJewR_DKve9iJKmkLdLwYDgyocjTuDwv8Ly5lNpDS_VcVRqU6TowZdwJYiywSbsCN0Q": {
+    "firstSeenAt": "2026-11-19T21:17:02.062Z",
+    "rating": "FIVE",
+    "hasReply": true,
+    "updateTime": "2026-11-19T15:31:52.459529Z"
+  },
   "accounts/106711451831008441902/locations/7456630582544079079/reviews/AbFvOqkP5toJalKAY0Tlf5mKauY7kB8UmMiTLrkLaad0CSMLqpJ_T0BBZkYlUVPCXC4MItHTGkzE": {
     "firstSeenAt": "2026-11-17T03:35:39.783Z",
     "rating": "FIVE",
@@ -110,7 +116,7 @@
   "accounts/106711451831008441902/locations/7456630582544079079/reviews/AbFvOqmXbW8CD6s2LH3AGtajuXsgIOvF3zN6fYOl4ly_jPXaug9IBdsRIYeFZvjlRAHsEVBkJGlCpw": {
     "firstSeenAt": "2026-10-29T20:07:35.710Z",
     "rating": "FIVE",
-    "hasReply": false,
+    "hasReply": true,
     "updateTime": "2026-10-29T12:56:41.855741Z"
   },
   "accounts/106711451831008441902/locations/7456630582544079079/reviews/AbFvOqk35SBwZOHiuxTjPnj0VGl8xwSEnhe9qGY4KreIJVW0tHIRHRoUIYByi1BH8RYoI1Nlbe1Rwg": {
